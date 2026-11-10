@@ -27,6 +27,11 @@ window.Tapdeck = (() => {
     open: '<svg class="ico" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>',
     terminal: '<svg class="ico" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></svg>',
     text: '<svg class="ico" viewBox="0 0 24 24"><path d="M5 6.5V5h14v1.5M12 5v14M9 19h6"/></svg>',
+    music: '<svg class="ico" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
+    clock: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+    calendar: '<svg class="ico" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    gauge: '<svg class="ico" viewBox="0 0 24 24"><path d="M4.5 17a8.5 8.5 0 1 1 15 0"/><path d="M12 13.5l4-4"/><circle cx="12" cy="14" r="1.2" fill="currentColor"/></svg>',
+    widget: '<svg class="ico" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="3.5" y="13" width="17" height="7.5" rx="2"/></svg>',
     gear: '<svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   };
 
@@ -51,11 +56,23 @@ window.Tapdeck = (() => {
   const systemById = (id) => SYSTEM.find((s) => s.id === id);
   const systemLabel = (id) => { const s = systemById(id); return s ? s[LANG] : id; };
 
+  // Widgets: live tiles placed on the grid like buttons. min = smallest
+  // size (columns, rows); sizes = the presets the editor offers.
+  const WIDGETS = [
+    { id: 'now_playing', icon: 'music', en: 'Now Playing', tr: 'Şu An Çalıyor', min: [2, 1], sizes: [[2, 1], [3, 1], [3, 2], [5, 3]] },
+    { id: 'clock', icon: 'clock', en: 'Clock', tr: 'Saat', min: [1, 1], sizes: [[1, 1], [2, 1], [2, 2]] },
+    { id: 'calendar', icon: 'calendar', en: 'Calendar', tr: 'Takvim', min: [1, 1], sizes: [[1, 1], [2, 2], [3, 2]] },
+    { id: 'volume', icon: 'volume', en: 'Volume', tr: 'Ses', min: [1, 1], sizes: [[2, 1], [5, 1], [1, 2]] },
+    { id: 'brightness', icon: 'sunUp', en: 'Brightness', tr: 'Parlaklık', min: [1, 1], sizes: [[2, 1], [5, 1], [1, 2]] },
+    { id: 'stats', icon: 'gauge', en: 'System', tr: 'Sistem', min: [1, 1], sizes: [[1, 1], [2, 1], [3, 1]] },
+  ];
+  const widgetById = (id) => WIDGETS.find((w) => w.id === id);
+
   // Button background colors ('' = default card color).
   const COLORS = ['', '#8b7cff', '#3b82f6', '#06b6d4', '#22c55e', '#eab308', '#f97316', '#ef4444', '#ec4899', '#64748b'];
 
   // Page grid limits; same as server.py.
   const GRID = { cols: 5, rows: 2, minCols: 2, maxCols: 6, minRows: 1, maxRows: 4 };
 
-  return { LANG, ICONS, SYSTEM, systemById, systemLabel, COLORS, GRID };
+  return { LANG, ICONS, SYSTEM, systemById, systemLabel, WIDGETS, widgetById, COLORS, GRID };
 })();

@@ -29,38 +29,7 @@
   </header>
 
   <main class="pages" id="pages">
-    <section class="page" id="musicPage">
-      <div class="music">
-        <div class="np">
-          <div class="art" id="art">
-            <svg class="ico" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
-          </div>
-          <div class="np-side">
-            <div>
-              <div class="source" id="source"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="sourceText"></span></div>
-              <div class="title" id="title"></div>
-              <div class="artist" id="artist"></div>
-              <div class="note" id="note" hidden></div>
-            </div>
-            <div class="progress" id="progress">
-              <span id="elapsed">0:00</span>
-              <div class="seek" id="seek"><div class="track"><div class="fill"></div></div></div>
-              <span id="duration">0:00</span>
-            </div>
-            <div class="transport">
-              <button id="prev" class="press" aria-label="Previous"></button>
-              <button id="play" class="play press" aria-label="Play/Pause"></button>
-              <button id="next" class="press" aria-label="Next"></button>
-            </div>
-          </div>
-        </div>
-        <div class="hslider" id="volumeRow">
-          <button class="btn card press" id="mute" aria-label="Mute"></button>
-          <div class="pill" id="volume"><div class="fill"></div><div class="lbl" id="volumeVal"></div></div>
-        </div>
-      </div>
-    </section>
-    <!-- button pages are added here from /api/deck -->
+    <!-- pages of buttons and widgets come from /api/deck -->
   </main>
 
   <nav class="dots" id="dots"></nav>

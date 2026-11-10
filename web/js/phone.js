@@ -1,5 +1,5 @@
 (() => {
-  const { LANG, ICONS, systemById, systemLabel } = window.Tapdeck;
+  const { LANG, ICONS, systemById } = window.Tapdeck;
 
   // ------------------------------------------------------------------ i18n
   const STRINGS = {
@@ -10,6 +10,7 @@
       keysOff: 'Media keys need Accessibility permission on the Mac.',
       tapAgain: 'Tap again', failed: 'That didn\'t work', done: 'Done', running: 'Running…',
       saved: 'Screenshot saved', locked: 'Mac locked', awakeOn: 'Mac will stay awake', awakeOff: 'Mac can sleep again',
+      cpu: 'CPU', ram: 'RAM',
       err_accessibility: 'Allow Accessibility for Tapdeck in System Settings → Privacy & Security.',
       err_automation: 'Allow Tapdeck to control System Events (Privacy & Security → Automation).',
       err_unsupported: 'This page can\'t do that.', err_bad_request: 'This button no longer exists.',
@@ -21,6 +22,7 @@
       keysOff: "Medya tuşları için Mac'te Erişilebilirlik izni gerekli.",
       tapAgain: 'Tekrar dokun', failed: 'Olmadı, tekrar dene', done: 'Tamam', running: 'Çalışıyor…',
       saved: 'Ekran görüntüsü kaydedildi', locked: 'Mac kilitlendi', awakeOn: 'Mac uyumayacak', awakeOff: 'Mac yine uyuyabilir',
+      cpu: 'CPU', ram: 'RAM',
       err_accessibility: 'Sistem Ayarları → Gizlilik ve Güvenlik → Erişilebilirlik’ten Tapdeck’e izin ver.',
       err_automation: 'Tapdeck’in System Events’i kontrol etmesine izin ver (Gizlilik ve Güvenlik → Otomasyon).',
       err_unsupported: 'Bu sayfa bunu desteklemiyor.', err_bad_request: 'Bu tuş artık yok.',
@@ -61,8 +63,12 @@
   function feedback(el, result) {
     if (!reduceMotion) replay(el, result && result.ok ? 'ok' : 'fail');
   }
-  $('prev').innerHTML = ICONS.prev;
-  $('next').innerHTML = ICONS.next;
+
+  function h(html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html.trim();
+    return tpl.content.firstElementChild;
+  }
 
   // ------------------------------------------------------------------ api
   const params = new URLSearchParams(location.search);
@@ -124,11 +130,12 @@
   }
 
   // ------------------------------------------------------------------ sliders
-  // Tap or drag anywhere on the bar to set the value.
+  // Tap or drag anywhere on the bar to set the value. A bar taller than it
+  // is wide works vertically, filling from the bottom. The CSS draws the
+  // fill from --v (0 to 1).
   class Slider {
     constructor(el, { max = 100, onInput, onChange, onDraw } = {}) {
       Object.assign(this, { el, max, onInput, onChange, onDraw, value: 0, dragging: false, holdUntil: 0 });
-      this.fill = el.querySelector('.fill');
       el.addEventListener('pointerdown', (e) => {
         this.dragging = true; try { el.setPointerCapture(e.pointerId); } catch {} el.classList.add('active'); this.move(e);
       });
@@ -144,12 +151,14 @@
     }
     move(e) {
       const p = pointIn(this.el, e);
-      this.draw(Math.min(1, Math.max(0, p.x / p.w)) * this.max);
+      const vertical = this.el.clientHeight > this.el.clientWidth * 1.2;
+      const f = vertical ? 1 - p.y / p.h : p.x / p.w;
+      this.draw(Math.min(1, Math.max(0, f)) * this.max);
       this.onInput && this.onInput(this.value);
     }
     draw(v) {
       this.value = v;
-      this.fill.style.width = (this.max ? (100 * v) / this.max : 0) + '%';
+      this.el.style.setProperty('--v', this.max ? v / this.max : 0);
       this.onDraw && this.onDraw(v);
     }
     busy() { return this.dragging || Date.now() < this.holdUntil; }
@@ -161,13 +170,14 @@
 
   const fmt = (s) => {
     s = Math.max(0, Math.floor(s || 0));
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, '0');
-    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+    const hh = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = String(s % 60).padStart(2, '0');
+    return hh ? `${hh}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
   };
 
   // ------------------------------------------------------------------ pages
   const pagesEl = $('pages');
-  const pageNames = [''];
+  let pageNames = [];
+  let pageHasPlayer = [];
   const pageCount = () => pagesEl.children.length;
   const currentPage = () => Math.round(pagesEl.scrollLeft / pagesEl.clientWidth);
   let shownPage = -1;
@@ -192,7 +202,7 @@
     shownPage = i;
     try { localStorage.setItem('tapdeckPage', String(i)); } catch {}
     const page = pagesEl.children[i];
-    if (page && page.classList.contains('deck-page') && !reduceMotion) {
+    if (page && !reduceMotion) {
       replay(page, 'enter');
       clearTimeout(page.enterTimer);
       page.enterTimer = setTimeout(() => page.classList.remove('enter'), 1200);
@@ -202,24 +212,25 @@
     try { return Math.min(pageCount() - 1, Number(localStorage.getItem('tapdeckPage')) || 0); } catch { return 0; }
   }
 
-  // While swiping, pages away from the center shrink and fade a little, and
-  // the dots stretch toward the page you're heading to.
+  // While swiping, pages away from the center shrink and fade a little, the
+  // dots stretch toward the page you're heading to, and the artwork glow
+  // shows only around pages with a Now Playing widget.
   let scrollFrame = 0;
   let settleTimer = null;
   function followScroll() {
     scrollFrame = 0;
     const pos = pagesEl.scrollLeft / (pagesEl.clientWidth || 1);
-    $('ambient').style.setProperty('--show', Math.max(0, 1 - pos).toFixed(3));
-    if (!reduceMotion) {
-      [...pagesEl.children].forEach((page, i) => {
-        const body = page.querySelector('.music, .deck');
-        const d = Math.min(1, Math.abs(i - pos));
-        if (body) {
-          body.style.transform = d > 0.001 ? `scale(${1 - 0.08 * d})` : '';
-          body.style.opacity = d > 0.001 ? String(1 - 0.45 * d) : '';
-        }
-      });
-    }
+    let glow = 0;
+    [...pagesEl.children].forEach((page, i) => {
+      const d = Math.min(1, Math.abs(i - pos));
+      if (pageHasPlayer[i]) glow = Math.max(glow, 1 - d);
+      const body = page.firstElementChild;
+      if (body && !reduceMotion) {
+        body.style.transform = d > 0.001 ? `scale(${1 - 0.08 * d})` : '';
+        body.style.opacity = d > 0.001 ? String(1 - 0.45 * d) : '';
+      }
+    });
+    $('ambient').style.setProperty('--show', glow.toFixed(3));
     [...$('dots').children].forEach((dot, i) => {
       const near = Math.max(0, 1 - Math.abs(i - pos));
       dot.firstChild.style.width = 7 + 13 * near + 'px';
@@ -233,30 +244,47 @@
   }, { passive: true });
   window.addEventListener('resize', () => goTo(savedPage()));
 
-  // ------------------------------------------------------------------ media
+  // ------------------------------------------------------------------ shared state
   let media = { source: 'keys' };
   let mediaAt = Date.now();
   let optimisticUntil = 0;
+  let muted = false;
+  let muteHoldUntil = 0;
+  let stats = {};
 
-  const seek = new Slider($('seek'), {
-    max: 1,
-    onInput: (v) => { $('elapsed').textContent = fmt(v); },
-    onChange: (v) => { media.position = v; mediaAt = Date.now(); act('seek', v); },
-  });
+  // What's mounted on the pages, so updates reach every copy of a widget.
+  let players = [];
+  let levels = { volume: [], brightness: [] };
+  let clocks = [];
+  let calendars = [];
+  let statWidgets = [];
+  let stateKeys = [];
 
-  function livePosition() {
-    if (!media.playing) return media.position || 0;
-    return Math.min(media.duration || Infinity, (media.position || 0) + (Date.now() - mediaAt) / 1000);
+  // ------------------------------------------------------------------ artwork
+  // Artwork, in the widgets and the glow behind the page, cross-fades.
+  function crossfade(box, url) {
+    if ((box.dataset.url || '') === (url || '')) return;
+    box.dataset.url = url || '';
+    if (!url) {
+      box.querySelectorAll('.layer').forEach(fadeOut);
+      box.classList.remove('loaded');
+      return;
+    }
+    const img = new Image();
+    img.className = 'layer';
+    img.alt = '';
+    img.onload = () => {
+      if (box.dataset.url !== url) return;
+      const old = [...box.querySelectorAll('.layer')];
+      box.appendChild(img);
+      void img.offsetWidth; // start from the hidden state so the fade runs
+      img.classList.add('in');
+      old.forEach(fadeOut);
+      box.classList.add('loaded');
+    };
+    img.src = url;
   }
-
-  let shownPlaying = null;
-  function renderPlayButton(playing) {
-    if (playing === shownPlaying) return;
-    const first = shownPlaying === null;
-    shownPlaying = playing;
-    $('play').innerHTML = playing ? ICONS.pause : ICONS.play;
-    if (!first && !reduceMotion) replay($('play'), 'morph');
-  }
+  function fadeOut(el) { el.classList.remove('in'); setTimeout(() => el.remove(), 900); }
 
   // Set text, sliding it in when it actually changed (a new track).
   function setText(el, text) {
@@ -266,126 +294,298 @@
     if (!first && !reduceMotion) replay(el, 'swap');
   }
 
-  // Artwork and the glow behind the page cross-fade to the new image.
-  let lastArt = null;
-  function showArtwork(url) {
-    lastArt = url;
-    const boxes = [$('art'), $('ambient')];
-    if (!url) {
-      boxes.forEach((box) => box.querySelectorAll('.layer').forEach(fadeOut));
-      $('art').classList.remove('loaded');
-      return;
-    }
-    const probe = new Image();
-    probe.onload = () => {
-      if (lastArt !== url) return;
-      boxes.forEach((box) => {
-        const old = [...box.querySelectorAll('.layer')];
-        const img = new Image();
-        img.className = 'layer';
-        img.alt = '';
-        img.src = url;
-        box.appendChild(img);
-        void img.offsetWidth; // start from the hidden state so the fade runs
-        img.classList.add('in');
-        old.forEach(fadeOut);
-      });
-      $('art').classList.add('loaded');
-    };
-    probe.src = url;
+  // ------------------------------------------------------------------ widget: now playing
+  function livePosition() {
+    if (!media.playing) return media.position || 0;
+    return Math.min(media.duration || Infinity, (media.position || 0) + (Date.now() - mediaAt) / 1000);
   }
-  function fadeOut(el) { el.classList.remove('in'); setTimeout(() => el.remove(), 900); }
+
+  function mountNowPlaying(el) {
+    el.classList.add('w-now');
+    el.innerHTML = `
+      <div class="np-art">${ICONS.music}</div>
+      <div class="np-info">
+        <div class="np-source"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="np-site"></span></div>
+        <div class="np-title"></div>
+        <div class="np-artist"></div>
+        <div class="np-note" hidden></div>
+      </div>
+      <div class="np-progress"><span class="np-el">0:00</span><div class="seek"><div class="track"><div class="fill"></div></div></div><span class="np-dur">0:00</span></div>
+      <div class="np-controls">
+        <button class="prev press" aria-label="Previous">${ICONS.prev}</button>
+        <button class="play press" aria-label="Play/Pause"></button>
+        <button class="next press" aria-label="Next">${ICONS.next}</button>
+      </div>`;
+    const q = (sel) => el.querySelector(sel);
+    const p = {
+      art: q('.np-art'), source: q('.np-source'), site: q('.np-site'), title: q('.np-title'), artist: q('.np-artist'),
+      note: q('.np-note'), progress: q('.np-progress'), elapsed: q('.np-el'), duration: q('.np-dur'), play: q('.play'), shown: null,
+    };
+    p.seek = new Slider(q('.seek'), {
+      max: 1,
+      onInput: (v) => { p.elapsed.textContent = fmt(v); },
+      onChange: (v) => { media.position = v; mediaAt = Date.now(); act('seek', v); },
+    });
+    p.play.addEventListener('click', async () => {
+      if (media.source === 'ext') {
+        media.playing = !media.playing; media.position = livePosition(); mediaAt = Date.now();
+        optimisticUntil = Date.now() + 1500;
+        players.forEach((o) => renderPlay(o, media.playing));
+      }
+      const r = await act('media', 'toggle');
+      if (!r.ok) feedback(p.play, r);
+    });
+    q('.next').addEventListener('click', async () => feedback(q('.next'), await act('media', 'next')));
+    q('.prev').addEventListener('click', async () => feedback(q('.prev'), await act('media', 'prev')));
+    el.querySelectorAll('button').forEach((b) => b.addEventListener('pointerdown', (e) => ripple(b, e)));
+    renderPlay(p, false);
+    players.push(p);
+  }
+
+  function renderPlay(p, playing) {
+    if (playing === p.shown) return;
+    const first = p.shown === null;
+    p.shown = playing;
+    p.play.innerHTML = playing ? ICONS.pause : ICONS.play;
+    if (!first && !reduceMotion) replay(p.play, 'morph');
+  }
 
   function renderMedia() {
     const ext = media.source === 'ext';
-    $('source').classList.toggle('live', ext && media.playing);
-    $('sourceText').textContent = ext ? media.site : t('keysTitle');
-    setText($('title'), ext ? (media.title || media.site) : t('keysTitle'));
-    setText($('artist'), ext ? [media.artist, media.album].filter(Boolean).join(' · ') : t('keysArtist'));
-    $('note').hidden = ext || media.keys !== false;
-    $('note').textContent = t('keysOff');
-    if (Date.now() > optimisticUntil) renderPlayButton(ext && media.playing);
-
     const art = ext ? media.artwork : '';
-    if (art !== lastArt) showArtwork(art);
-
-    $('progress').classList.toggle('off', !ext || !(media.duration > 0));
-    $('seek').classList.toggle('disabled', !(ext && media.canSeek && media.duration > 0));
+    players.forEach((p) => {
+      p.source.classList.toggle('live', ext && media.playing);
+      p.site.textContent = ext ? media.site : t('keysTitle');
+      setText(p.title, ext ? (media.title || media.site) : t('keysTitle'));
+      setText(p.artist, ext ? [media.artist, media.album].filter(Boolean).join(' · ') : t('keysArtist'));
+      p.note.hidden = ext || media.keys !== false;
+      p.note.textContent = t('keysOff');
+      if (Date.now() > optimisticUntil) renderPlay(p, ext && media.playing);
+      crossfade(p.art, art);
+      p.progress.classList.toggle('off', !ext || !(media.duration > 0));
+      p.seek.el.classList.toggle('disabled', !(ext && media.canSeek && media.duration > 0));
+    });
+    crossfade($('ambient'), players.length ? art : '');
     tickProgress();
   }
 
   function tickProgress() {
     if (media.source !== 'ext' || !(media.duration > 0)) return;
     const pos = livePosition();
-    seek.update(pos, media.duration);
-    if (!seek.dragging) $('elapsed').textContent = fmt(pos);
-    $('duration').textContent = fmt(media.duration);
+    players.forEach((p) => {
+      p.seek.update(pos, media.duration);
+      if (!p.seek.dragging) p.elapsed.textContent = fmt(pos);
+      p.duration.textContent = fmt(media.duration);
+    });
   }
   setInterval(tickProgress, 250);
 
-  $('play').addEventListener('click', async () => {
-    if (media.source === 'ext') {
-      media.playing = !media.playing; media.position = livePosition(); mediaAt = Date.now();
-      renderPlayButton(media.playing); optimisticUntil = Date.now() + 1500;
-    }
-    const r = await act('media', 'toggle');
-    if (!r.ok) feedback($('play'), r);
-  });
-  $('next').addEventListener('click', async () => feedback($('next'), await act('media', 'next')));
-  $('prev').addEventListener('click', async () => feedback($('prev'), await act('media', 'prev')));
-  ['play', 'next', 'prev', 'mute'].forEach((id) => $(id).addEventListener('pointerdown', (e) => ripple($(id), e)));
-
-  // ------------------------------------------------------------------ volume
-  let muted = false;
-  let muteHoldUntil = 0;
-  const volume = new Slider($('volume'), {
-    onInput: throttle((v) => { act('volume', Math.round(v)); if (muted) { muted = false; renderStates(); } }, 120),
-    onChange: (v) => act('volume', Math.round(v)),
-    onDraw: (v) => { $('volumeVal').textContent = Math.round(v); },
-  });
+  // ------------------------------------------------------------------ widgets: volume and brightness
   function toggleMute() { muted = !muted; muteHoldUntil = Date.now() + 1500; renderStates(); return act('mute'); }
-  $('mute').addEventListener('click', toggleMute);
 
-  // ------------------------------------------------------------------ button pages
+  function mountLevel(el, kind, tile) {
+    el.classList.add('w-level');
+    tile.classList.add('bare');
+    el.innerHTML = `<button class="lvl-btn press" aria-label="${kind === 'volume' ? 'Mute' : 'Brightness'}">${kind === 'volume' ? ICONS.volume : ICONS.sunUp}</button>
+      <div class="lvl-pill"><div class="fill"></div><div class="lbl"></div></div>`;
+    const btn = el.querySelector('.lvl-btn');
+    const label = el.querySelector('.lbl');
+    const send = throttle((v) => act(kind, Math.round(v)), kind === 'volume' ? 120 : 80);
+    const slider = new Slider(el.querySelector('.lvl-pill'), {
+      onInput: (v) => {
+        send(v);
+        levels[kind].forEach((o) => { if (o !== slider) o.draw(v); });
+        if (kind === 'volume' && muted) { muted = false; renderStates(); }
+      },
+      onChange: (v) => {
+        act(kind, Math.round(v));
+        levels[kind].forEach((o) => { o.holdUntil = slider.holdUntil; });
+      },
+      onDraw: (v) => { label.textContent = Math.round(v); },
+    });
+    slider.widget = tile;
+    slider.btn = btn;
+    btn.addEventListener('pointerdown', (e) => ripple(btn, e));
+    if (kind === 'volume') btn.addEventListener('click', toggleMute);
+    else btn.addEventListener('click', async () => feedback(btn, await act('brightness_up')));
+    levels[kind].push(slider);
+  }
+
+  // ------------------------------------------------------------------ widgets: clock and calendar
+  function mountClock(el) {
+    el.classList.add('w-clock');
+    el.innerHTML = '<div class="c-time"></div><div class="c-date"><span class="long"></span><span class="short"></span></div>';
+    clocks.push({ time: el.querySelector('.c-time'), long: el.querySelector('.long'), short: el.querySelector('.short') });
+    el.querySelector('.c-time').innerHTML = '<span></span><small></small>';
+    tickClock();
+  }
+
+  function mountCalendar(el) {
+    el.classList.add('w-cal');
+    calendars.push(el);
+    drawCalendar(el);
+  }
+
+  function drawCalendar(el) {
+    const now = new Date();
+    const day = now.getDate();
+    const weekday = now.toLocaleDateString(LANG, { weekday: 'short' }).replace('.', '');
+    const month = now.toLocaleDateString(LANG, { month: 'long' });
+    // Weeks start on Monday in Turkish, Sunday in English.
+    const firstDow = LANG === 'tr' ? 1 : 0;
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lead = (first.getDay() - firstDow + 7) % 7;
+    const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const names = [...Array(7)].map((_, i) => new Date(2023, 0, 1 + ((i + firstDow) % 7))
+      .toLocaleDateString(LANG, { weekday: 'narrow' }));
+    let cells = names.map((n) => `<span class="dow">${n}</span>`).join('');
+    cells += '<span></span>'.repeat(lead);
+    for (let d = 1; d <= days; d++) {
+      const dow = new Date(now.getFullYear(), now.getMonth(), d).getDay();
+      const cls = d === day ? 'today' : dow === 0 || dow === 6 ? 'weekend' : '';
+      cells += `<span class="${cls}">${d}</span>`;
+    }
+    el.innerHTML = `
+      <div class="cal-today"><span class="cal-wd">${weekday}</span><span class="cal-day">${day}</span><span class="cal-mon">${month}</span></div>
+      <div class="cal-month"><div class="cal-head"><span>${month}</span> ${now.getFullYear()}</div><div class="cal-grid">${cells}</div></div>`;
+    el.dataset.day = now.toDateString();
+  }
+
+  const timeFormat = new Intl.DateTimeFormat(LANG, { hour: '2-digit', minute: '2-digit' });
+  function tickClock() {
+    const now = new Date();
+    const time = timeFormat.format(now);
+    const parts = timeFormat.formatToParts(now);
+    const digits = parts.filter((x) => x.type !== 'dayPeriod').map((x) => x.value).join('').trim();
+    const period = (parts.find((x) => x.type === 'dayPeriod') || {}).value || '';
+    const long = now.toLocaleDateString(LANG, { weekday: 'long', day: 'numeric', month: 'long' });
+    const short = now.toLocaleDateString(LANG, { weekday: 'short', day: 'numeric' });
+    $('time').textContent = time;
+    $('date').textContent = long;
+    clocks.forEach((c) => {
+      c.time.firstChild.textContent = digits; c.time.lastChild.textContent = period;
+      c.long.textContent = long; c.short.textContent = short;
+    });
+    calendars.forEach((el) => { if (el.dataset.day !== now.toDateString()) drawCalendar(el); });
+  }
+  setInterval(tickClock, 1000);
+
+  // ------------------------------------------------------------------ widget: system
+  const loadClass = (p) => (p >= 85 ? 'bad' : p >= 60 ? 'warn' : '');
+  const RING_COLORS = { '': 'var(--accent)', warn: 'var(--warn)', bad: 'var(--danger)', good: 'var(--ok)' };
+
+  function mountStats(el) {
+    el.classList.add('w-stats');
+    const ring = (key, name) => `<div class="st" data-key="${key}"><div class="st-ring">
+      <svg viewBox="0 0 44 44"><circle class="bgc" cx="22" cy="22" r="18"/><circle class="fg" cx="22" cy="22" r="18"/></svg>
+      <span class="st-val">–</span></div><span class="st-name">${name}</span></div>`;
+    el.innerHTML = ring('cpu', t('cpu')) + ring('ram', t('ram')) + ring('bat', t('battery'));
+    statWidgets.push(el);
+    renderStats();
+  }
+
+  // { key: [percent, label, colorClass] } from the last /api/stats reply.
+  function statValues() {
+    const out = {};
+    if (stats.cpu != null) out.cpu = [stats.cpu, stats.cpu + '%', loadClass(stats.cpu)];
+    if (stats.memory) out.ram = [stats.memory.percent, stats.memory.percent + '%', loadClass(stats.memory.percent)];
+    const bat = stats.battery;
+    if (bat) out.bat = [bat.percent, (bat.charging ? '⚡' : '') + bat.percent + '%', bat.charging || bat.plugged ? 'good' : bat.percent <= 20 ? 'bad' : ''];
+    return out;
+  }
+
+  function renderStats() {
+    const v = statValues();
+    setChip('cpuChip', v.cpu);
+    setChip('ramChip', v.ram);
+    setChip('batChip', v.bat);
+    statWidgets.forEach((el) => el.querySelectorAll('.st').forEach((st) => {
+      const val = v[st.dataset.key];
+      st.classList.toggle('hidden', !val && st.dataset.key === 'bat' && stats.cpu != null);
+      if (!val) return;
+      const fg = st.querySelector('.fg');
+      fg.style.strokeDashoffset = 113.1 * (1 - Math.min(100, val[0]) / 100);
+      fg.style.stroke = RING_COLORS[val[2]];
+      st.querySelector('.st-val').textContent = val[1];
+    }));
+  }
+
+  function setChip(id, val) {
+    const chip = $(id);
+    chip.classList.toggle('hidden', !val);
+    if (!val) return;
+    const b = chip.querySelector('b');
+    b.textContent = val[1]; b.className = val[2] || '';
+  }
+
+  const WIDGETS = {
+    now_playing: mountNowPlaying,
+    clock: mountClock,
+    calendar: mountCalendar,
+    volume: (el, tile) => mountLevel(el, 'volume', tile),
+    brightness: (el, tile) => mountLevel(el, 'brightness', tile),
+    stats: mountStats,
+  };
+
+  // ------------------------------------------------------------------ deck
   let deckVersion = null;
-  let stats = {};
   const stateOf = { muted: () => muted, dark: () => !!stats.dark, caffeinate: () => !!stats.caffeinate };
-  let stateKeys = [];
 
   async function loadDeck() {
     try {
       const deck = await api('/api/deck');
       deckVersion = deck.version;
       const keep = savedPage();
-      [...pagesEl.querySelectorAll('.page.deck-page')].forEach((p) => p.remove());
-      pageNames.length = 1;
+      pagesEl.innerHTML = '';
+      players = []; levels = { volume: [], brightness: [] }; clocks = []; calendars = []; statWidgets = []; stateKeys = [];
+      pageNames = []; pageHasPlayer = [];
       shownPage = -1;
-      stateKeys = [];
       deck.pages.forEach((page) => {
         const section = document.createElement('section');
-        section.className = 'page deck-page';
+        section.className = 'page';
         const grid = document.createElement('div');
         grid.className = 'deck';
         grid.style.setProperty('--cols', page.cols);
         grid.style.setProperty('--rows', page.rows);
-        page.buttons.forEach((b, i) => grid.appendChild(renderKey(b, i)));
+        page.buttons.forEach((b, i) => grid.appendChild(b.widget ? renderWidget(b, i) : renderKey(b, i)));
         section.appendChild(grid);
         pagesEl.appendChild(section);
         pageNames.push(page.name);
+        pageHasPlayer.push(page.buttons.some((b) => b.widget === 'now_playing'));
       });
       renderDots();
       goTo(Math.min(keep, pageCount() - 1));
       renderStates();
+      renderMedia();
+      renderStats();
     } catch { setTimeout(loadDeck, 3000); }
+  }
+
+  function place(el, b, index) {
+    el.style.gridColumn = `${b.x + 1} / span ${b.w}`;
+    el.style.gridRow = `${b.y + 1} / span ${b.h}`;
+    el.style.setProperty('--i', index);
+  }
+
+  // The tile is the size container; the widget lays out an inner layer, since
+  // container queries can only style what's inside the container.
+  function renderWidget(b, index) {
+    const tile = document.createElement('div');
+    tile.className = 'widget';
+    place(tile, b, index);
+    const body = document.createElement('div');
+    body.className = 'wb';
+    tile.appendChild(body);
+    const mount = WIDGETS[b.widget];
+    if (mount) mount(body, tile);
+    return tile;
   }
 
   function renderKey(b, index) {
     const el = document.createElement('button');
     el.className = 'key press';
-    el.style.setProperty('--i', index);
+    place(el, b, index);
     el.addEventListener('pointerdown', (e) => ripple(el, e));
-    el.style.gridColumn = `${b.x + 1} / span ${b.w}`;
-    el.style.gridRow = `${b.y + 1} / span ${b.h}`;
     if (b.color) { el.classList.add('colored'); el.style.setProperty('--c', b.color); }
     const sys = b.system && systemById(b.system);
     if (sys && sys.state) { el.dataset.state = sys.state; stateKeys.push(el); }
@@ -438,9 +638,11 @@
   }
 
   function renderStates() {
-    $('mute').innerHTML = muted ? ICONS.mute : ICONS.volume;
-    $('mute').classList.toggle('on', muted);
-    $('volume').classList.toggle('muted', muted);
+    levels.volume.forEach((s) => {
+      s.btn.innerHTML = muted ? ICONS.mute : ICONS.volume;
+      s.btn.classList.toggle('on', muted);
+      s.widget.classList.toggle('muted', muted);
+    });
     stateKeys.forEach((el) => el.classList.toggle('on', stateOf[el.dataset.state]()));
   }
 
@@ -454,38 +656,17 @@
       else if (s.build !== build) { location.reload(); return; }
       media = s.media; mediaAt = Date.now();
       renderMedia();
-      $('volumeRow').style.visibility = s.volume == null ? 'hidden' : '';
-      if (s.volume != null) volume.update(s.volume);
-      if (Date.now() > muteHoldUntil && !volume.busy()) { muted = s.muted; renderStates(); }
+      levels.volume.forEach((sl) => { sl.widget.classList.toggle('unavailable', s.volume == null); if (s.volume != null) sl.update(s.volume); });
+      levels.brightness.forEach((sl) => { sl.widget.classList.toggle('unavailable', s.brightness == null); if (s.brightness != null) sl.update(s.brightness); });
+      if (Date.now() > muteHoldUntil && !levels.volume.some((sl) => sl.busy())) { muted = s.muted; renderStates(); }
       if (deckVersion !== null && s.deckVersion !== deckVersion) loadDeck();
     } catch {}
   }
 
-  function tickClock() {
-    const now = new Date();
-    $('time').textContent = now.toLocaleTimeString(LANG, { hour: '2-digit', minute: '2-digit' });
-    $('date').textContent = now.toLocaleDateString(LANG, { weekday: 'long', day: 'numeric', month: 'long' });
-  }
-  setInterval(tickClock, 1000); tickClock();
-
-  function setChip(id, text, cls) {
-    const chip = $(id);
-    chip.classList.toggle('hidden', text == null);
-    if (text == null) return;
-    const b = chip.querySelector('b');
-    b.textContent = text; b.className = cls || '';
-  }
-  const loadClass = (p) => (p >= 85 ? 'bad' : p >= 60 ? 'warn' : '');
-
   async function pollStats() {
     try {
       stats = await api('/api/stats');
-      setChip('cpuChip', stats.cpu + '%', loadClass(stats.cpu));
-      const mem = stats.memory;
-      setChip('ramChip', mem ? mem.percent + '%' : null, mem && loadClass(mem.percent));
-      const bat = stats.battery;
-      setChip('batChip', bat ? (bat.charging ? '⚡' : '') + bat.percent + '%' : null,
-        bat && (bat.charging || bat.plugged ? 'good' : bat.percent <= 20 ? 'bad' : ''));
+      renderStats();
       renderStates();
     } catch {}
   }
@@ -511,9 +692,7 @@
     else { start(); tickClock(); }
   });
 
-  renderDots();
-  renderStates();
-  renderPlayButton(false);
+  tickClock();
   loadDeck();
   start();
 })();

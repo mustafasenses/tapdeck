@@ -53,68 +53,144 @@ button { background: none; border: 0; padding: 0; }
 .press { transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .25s, filter .15s; }
 .press:active { transform: scale(.94); background: var(--card-press); transition-duration: .1s; }
 
-/* ---------- music page ---------- */
-/* The current artwork, blurred, softly lighting the whole screen behind the
-   music page. It fades out as you swipe to the button pages (--show). */
+/* ---------- widgets ---------- */
+/* Live tiles placed on the grid like buttons. Each lays itself out from its
+   own size (container queries), so every size the editor allows works. */
+.widget { position: relative; min-width: 0; min-height: 0; border-radius: var(--radius); background: var(--card); overflow: hidden; container-type: size; }
+.widget.unavailable { visibility: hidden; }
+.widget.bare { background: none; }
+.wb { position: absolute; inset: 0; }
+
+/* The playing artwork, blurred, softly lighting the whole screen while a
+   page with a Now Playing widget is in view (--show). */
 .ambient { position: fixed; inset: -20%; z-index: 0; pointer-events: none;
-  filter: blur(90px) saturate(1.25); opacity: calc(.22 * var(--show, 1)); }
-.music { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+  filter: blur(90px) saturate(1.25); opacity: calc(.22 * var(--show, 0)); }
 /* Artwork layers cross-fade when the track changes. */
 .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.06); transition: opacity .7s ease, transform .9s cubic-bezier(.2, .8, .2, 1); }
 .layer.in { opacity: 1; transform: none; }
-.np { flex: 1; min-height: 0; display: flex; gap: 22px; }
-.art {
-  height: 100%; aspect-ratio: 1 / 1; flex: none; border-radius: 20px; overflow: hidden;
-  background: var(--card); display: grid; place-items: center; color: var(--faint);
-  box-shadow: 0 10px 30px rgba(0,0,0,.4);
-}
-.art { position: relative; }
-.art svg { transition: opacity .4s; }
-.art.loaded svg { opacity: 0; }
-.art svg { width: 64px; height: 64px; }
-.np-side { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 0; }
-.source { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
-.eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
-.eq i { width: 3px; height: 4px; border-radius: 1.5px; background: var(--faint); transition: background .3s; }
-.source.live .eq i { background: var(--ok); animation: eq .9s ease-in-out infinite alternate; }
-.source.live .eq i:nth-child(2) { animation-duration: .7s; animation-delay: -.3s; }
-.source.live .eq i:nth-child(3) { animation-duration: 1.1s; animation-delay: -.6s; }
-@keyframes eq { from { height: 3px; } to { height: 12px; } }
 /* New track: title and artist slide in. */
 .swap { animation: fade-up .5s cubic-bezier(.2, .8, .2, 1); }
-.title { font-size: 26px; font-weight: 800; line-height: 1.15; letter-spacing: -.015em; margin-top: 6px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.artist { font-size: 17px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note { color: var(--warn); font-size: 13px; margin-top: 6px; }
 
-.progress { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.progress.off { visibility: hidden; }
-.progress span { width: 44px; flex: none; }
-.progress span:last-child { text-align: right; }
-.seek { flex: 1; height: 32px; position: relative; touch-action: none; }
-.seek .track { position: absolute; left: 0; right: 0; top: 12px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); overflow: hidden; transition: top .1s, height .1s; }
-.seek .fill { height: 100%; width: 0; background: var(--text); transition: width .25s linear; }
+/* Now Playing: artwork beside title, seek bar and controls. */
+.w-now {
+  --pad: clamp(10px, 5cqh, 16px);
+  display: grid; gap: clamp(6px, 4cqh, 14px) clamp(12px, 3cqw, 22px); padding: var(--pad);
+  grid-template-columns: calc(100cqh - 2 * var(--pad)) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-areas: "art info" "art progress" "art controls";
+}
+.np-art { grid-area: art; position: relative; width: 100%; height: 100%; border-radius: 16px; overflow: hidden;
+  background: var(--card); display: grid; place-items: center; color: var(--faint); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.np-art .ico { width: 36%; height: 36%; transition: opacity .4s; }
+.np-art.loaded .ico { opacity: 0; }
+.np-info { grid-area: info; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.np-source { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; flex: none; }
+.eq i { width: 3px; height: 4px; border-radius: 1.5px; background: var(--faint); transition: background .3s; }
+.np-source.live .eq i { background: var(--ok); animation: eq .9s ease-in-out infinite alternate; }
+.np-source.live .eq i:nth-child(2) { animation-duration: .7s; animation-delay: -.3s; }
+.np-source.live .eq i:nth-child(3) { animation-duration: 1.1s; animation-delay: -.6s; }
+@keyframes eq { from { height: 3px; } to { height: 12px; } }
+.np-title { font-size: clamp(15px, 9cqh, 28px); font-weight: 800; line-height: 1.15; letter-spacing: -.015em; margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.np-artist { font-size: clamp(12px, 5.5cqh, 18px); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-note { color: var(--warn); font-size: 12px; }
+
+.np-progress { grid-area: progress; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.np-progress.off { visibility: hidden; }
+.np-progress span { width: 40px; flex: none; }
+.np-progress span:last-child { text-align: right; }
+.seek { flex: 1; height: 30px; position: relative; touch-action: none; }
+.seek .track { position: absolute; left: 0; right: 0; top: 11px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); overflow: hidden; transition: top .1s, height .1s; }
+.seek .fill { height: 100%; width: calc(var(--v, 0) * 100%); background: var(--text); transition: width .25s linear; }
 .seek.active .fill { transition: none; }
-.seek.active .track { top: 9px; height: 14px; border-radius: 7px; }
+.seek.active .track { top: 8px; height: 14px; border-radius: 7px; }
 .seek.disabled { pointer-events: none; }
 
-.transport { display: flex; align-items: center; gap: 16px; }
-.transport button { position: relative; overflow: hidden; height: 76px; flex: 1; border-radius: 22px; background: var(--card); display: grid; place-items: center; }
-.transport .ico { width: 36px; height: 36px; }
-.transport .play { flex: 1.4; background: var(--text); color: var(--bg); }
-.transport .play:active { background: #d4d4dc; }
-.transport .play .ico { width: 40px; height: 40px; }
-.transport .play.morph .ico { animation: pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+.np-controls { grid-area: controls; display: flex; gap: clamp(8px, 2cqw, 16px); }
+.np-controls button { position: relative; overflow: hidden; flex: 1; height: clamp(44px, 24cqh, 78px); border-radius: 18px; background: var(--card); display: grid; place-items: center; }
+.np-controls .ico { width: clamp(22px, 12cqh, 36px); height: clamp(22px, 12cqh, 36px); }
+.np-controls .play { flex: 1.4; background: var(--text); color: var(--bg); }
+.np-controls .play:active { background: #d4d4dc; }
+.np-controls .play.morph .ico { animation: pop .45s cubic-bezier(.34, 1.56, .64, 1); }
 
-.hslider { flex: none; height: 64px; display: flex; gap: 12px; }
-.hslider .btn { position: relative; overflow: hidden; width: 64px; flex: none; display: grid; place-items: center; color: var(--muted); }
-.hslider .btn.on { color: var(--danger); background: rgba(248,113,113,.14); }
-.pill { flex: 1; border-radius: 20px; background: var(--card); overflow: hidden; position: relative; touch-action: none; }
-.pill .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-.pill .lbl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding: 0 20px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
-.pill.muted .fill { background: var(--faint); }
+/* One row high: artwork, title and controls side by side. */
+@container (max-height: 190px) {
+  .w-now { grid-template-columns: calc(100cqh - 2 * var(--pad)) minmax(0, 1fr) auto; grid-template-rows: minmax(0, 1fr); grid-template-areas: "art info controls"; align-items: center; }
+  .np-progress { display: none; }
+  .np-art { border-radius: 12px; }
+  .np-controls button { flex: none; width: clamp(40px, 38cqh, 64px); height: clamp(40px, 38cqh, 64px); border-radius: 14px; }
+  .np-controls .play { width: clamp(46px, 46cqh, 76px); }
+}
+@container (max-height: 190px) and (max-width: 440px) {
+  .np-controls .prev, .np-source { display: none; }
+}
+/* Square or tall: artwork on top, everything else below it. */
+@container (min-height: 191px) and (max-aspect-ratio: 6 / 5) {
+  .w-now { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto auto; grid-template-areas: "art" "info" "progress" "controls"; }
+  .np-art { width: auto; aspect-ratio: 1 / 1; justify-self: start; }
+}
 
-/* ---------- button pages ---------- */
+/* Volume and brightness: a button and a bar to drag. Wide tiles get a
+   horizontal bar; tall ones a vertical bar that fills from the bottom. */
+.w-level { display: flex; gap: 10px; background: none; }
+.lvl-btn { position: relative; overflow: hidden; flex: none; height: 100%; aspect-ratio: 1 / 1; max-width: 35%; border-radius: var(--radius); background: var(--card); display: grid; place-items: center; color: var(--muted); }
+.lvl-btn.on { color: var(--danger); background: rgba(248,113,113,.16); }
+.lvl-pill { flex: 1; position: relative; overflow: hidden; border-radius: var(--radius); background: var(--card); touch-action: none; }
+.lvl-pill .fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--v, 0) * 100%); background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.lvl-pill .lbl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end; padding: 0 18px; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+.w-level.muted .fill { background: var(--faint); }
+@container (max-aspect-ratio: 5 / 6) {
+  .w-level { flex-direction: column-reverse; }
+  .lvl-btn { height: auto; width: 100%; max-width: none; max-height: 35%; }
+  .lvl-pill .fill { inset: auto 0 0 0; width: 100%; height: calc(var(--v, 0) * 100%); background: linear-gradient(0deg, var(--accent), var(--accent-2)); }
+  .lvl-pill .lbl { align-items: flex-start; justify-content: center; padding: 14px 0; }
+}
+
+/* Clock */
+.w-clock { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3cqh; padding: 8px; text-align: center; }
+.c-time { font-size: min(44cqh, 26cqw); font-weight: 800; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.c-time small { font-size: .32em; font-weight: 700; letter-spacing: 0; color: var(--muted); margin-left: .15em; }
+.c-date { font-size: clamp(11px, min(11cqh, 6.5cqw), 22px); font-weight: 600; color: var(--muted); }
+.c-date .short { display: none; }
+@container (max-width: 300px) { .c-date .long { display: none; } .c-date .short { display: inline; } }
+
+/* Calendar: today on small tiles, the month on big ones. */
+.w-cal { display: grid; place-items: center; padding: clamp(8px, 5cqmin, 16px); }
+.cal-today { display: flex; flex-direction: column; align-items: center; line-height: 1; gap: 4cqh; }
+.cal-wd { font-size: clamp(11px, 11cqmin, 20px); font-weight: 800; letter-spacing: .06em; color: var(--danger); text-transform: uppercase; }
+.cal-day { font-size: min(52cqh, 46cqw); font-weight: 800; letter-spacing: -.04em; }
+.cal-mon { font-size: clamp(11px, 9cqmin, 18px); font-weight: 600; color: var(--muted); }
+.cal-month { display: none; width: 100%; height: 100%; flex-direction: column; gap: 4px; }
+.cal-head { font-size: clamp(12px, 6cqmin, 18px); font-weight: 800; padding: 0 4px; }
+.cal-head span { color: var(--danger); }
+.cal-grid { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 1fr; align-items: center; justify-items: center; font-size: clamp(10px, 4.6cqmin, 15px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-grid .dow { color: var(--faint); font-size: .8em; font-weight: 700; }
+.cal-grid .today { background: var(--danger); color: #fff; border-radius: 999px; width: 2em; height: 2em; display: grid; place-items: center; }
+.cal-grid .weekend { color: var(--muted); }
+@container (min-width: 250px) and (min-height: 230px) {
+  .cal-today { display: none; }
+  .cal-month { display: flex; }
+}
+
+/* System: CPU, memory and battery as rings, or rows on narrow tiles. */
+.w-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; padding: clamp(8px, 5cqmin, 16px); gap: 6px; }
+.st { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.st-ring { position: relative; width: min(62cqh, 26cqw); aspect-ratio: 1 / 1; container-type: inline-size; }
+.st-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.st-ring circle { fill: none; stroke-width: 4.5; }
+.st-ring .bgc { stroke: rgba(255,255,255,.1); }
+.st-ring .fg { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 113.1; stroke-dashoffset: 113.1; transition: stroke-dashoffset .8s cubic-bezier(.2, .8, .2, 1), stroke .3s; }
+.st-val { position: absolute; inset: 0; display: grid; place-items: center; font-size: 25cqw; font-weight: 800; font-variant-numeric: tabular-nums; }
+.st-name { font-size: clamp(9px, 7cqmin, 13px); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.st.hidden { display: none; }
+@container (max-aspect-ratio: 3 / 2) {
+  .w-stats { grid-template-columns: 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 2px; }
+  .st { flex-direction: row-reverse; justify-content: space-between; width: 100%; height: 100%; }
+  .st-ring { width: auto; height: 100%; }
+  .st-val { font-size: 24cqw; }
+}
+
+/* ---------- pages ---------- */
 .deck { height: 100%; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr); gap: 12px; padding-bottom: 6px; }
 .deck .key { overflow: hidden; }
 .key.colored:active { background: var(--c); filter: brightness(1.2); }
@@ -136,8 +212,8 @@ button { background: none; border: 0; padding: 0; }
   20% { transform: translateX(-7px); box-shadow: inset 0 0 0 3px rgba(248,113,113,.9); }
   40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); }
 }
-/* Landing on a button page: its buttons pop in one after another. */
-.page.enter .key { animation: key-in .55s cubic-bezier(.2, .9, .3, 1.15) both; animation-delay: calc(var(--i, 0) * 35ms); }
+/* Landing on a page: its buttons and widgets pop in one after another. */
+.page.enter :is(.key, .widget) { animation: key-in .55s cubic-bezier(.2, .9, .3, 1.15) both; animation-delay: calc(var(--i, 0) * 35ms); }
 
 /* ---------- overlays ---------- */
 .toast {
@@ -157,7 +233,6 @@ button { background: none; border: 0; padding: 0; }
 .gate h1 { font-size: 24px; margin: 0 0 8px; }
 .gate p { color: var(--muted); margin: 0; line-height: 1.5; }
 
-/* ---------- portrait ---------- */
 /* ---------- always landscape ---------- */
 /* iOS web apps can't lock orientation, so when the phone reports portrait the
    whole screen is turned 90° and stays in the landscape layout. The device's
@@ -174,9 +249,4 @@ button { background: none; border: 0; padding: 0; }
     width: 100vh; width: 100dvh; height: 100vw;
     transform-origin: top left; transform: rotate(90deg) translateY(-100%);
   }
-}
-@media (max-height: 360px) and (orientation: landscape) {
-  .transport button { height: 64px; }
-  .hslider { height: 54px; }
-  .title { font-size: 22px; }
 }
