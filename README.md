@@ -30,9 +30,21 @@ Nothing to install on the phone: it's a web app you add to the home screen. The 
 
 **1. Start Tapdeck**
 
-Double-click **`Tapdeck.command`** in Finder. A Terminal window opens and Tapdeck runs as long as it stays open. Close the window to stop it.
+The easiest way is a Dock app. Build it once:
 
-You can also run it from a terminal:
+```sh
+python3 server.py --make-app
+```
+
+Drag the new **Tapdeck.app** to your Dock.
+
+- **Click it** to start Tapdeck.
+- **Click it again** while it runs to choose **Edit Buttons**, **Connect Phone** or **Stop Tapdeck**.
+- **Quit it** (⌘Q, or Quit in its Dock menu) to stop Tapdeck.
+
+If Tapdeck is already running from somewhere else (for example Terminal), the app takes it over, so you can still stop it from the Dock.
+
+Without the app, double-click **`Tapdeck.command`** in Finder: Tapdeck runs in a Terminal window until you close it. Or run it yourself:
 
 ```sh
 python3 server.py --open   # --open also opens the button editor
@@ -41,7 +53,7 @@ python3 server.py --open   # --open also opens the button editor
 The first time you run Tapdeck:
 
 - macOS asks whether `python3` may accept incoming connections. Choose **Allow**.
-- macOS asks for **Accessibility** access for the app running Tapdeck (e.g. Terminal). Allow it in *System Settings → Privacy & Security → Accessibility*. Shortcuts, typed text and media keys need it.
+- macOS asks for **Accessibility** access for the app running Tapdeck (Tapdeck, or Terminal). Allow it in *System Settings → Privacy & Security → Accessibility*. Shortcuts, typed text and media keys need it.
 - If double-clicking `Tapdeck.command` is blocked for a file downloaded from the internet, right-click it and choose **Open** once.
 
 **2. Connect your phone**
@@ -86,8 +98,9 @@ The editor only opens on the Mac itself. Buttons can run commands, so other devi
 
 | File | What it is |
 | --- | --- |
-| `Tapdeck.command` | Double-click to start Tapdeck |
-| `server.py` | Starts the server (`--open`, `--install`, `--uninstall`) |
+| `Tapdeck.command` | Double-click to start Tapdeck in a Terminal window |
+| `server.py` | Starts the server (`--open`, `--make-app`, `--install`, `--uninstall`) |
+| `tapdeck/macapp.py`, `icon.py` | Builds Tapdeck.app for the Dock; draws the icon |
 | `tapdeck/` | The server, standard library only |
 | `tapdeck/handler.py` | HTTP routes, token and Mac-only checks |
 | `tapdeck/panel.py` | What each button and control does |
@@ -131,6 +144,7 @@ Security:
 ## Notes
 
 - **Brightness** controls the built-in display through the private DisplayServices framework. It does nothing on desktop Macs or in clamshell mode.
+- **Rebuilding Tapdeck.app** gives it a new ad-hoc signature, and macOS ties Accessibility permission to the signature. Remove the old entry (`tccutil reset Accessibility com.tapdeck.launcher`) and allow Tapdeck again.
 - **Lock** presses ⌃⌘Q. Without Accessibility permission it turns the display off instead.
 - **Keep Awake** keeps the Mac and its display from sleeping until you turn it off or stop Tapdeck.
 - **Dark Mode** asks once for permission to control System Events.
