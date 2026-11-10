@@ -1,0 +1,7 @@
+# Personal: your access token and your buttons
+config.json
+deck.json
+
+.cache/
+__pycache__/
+.DS_Store
