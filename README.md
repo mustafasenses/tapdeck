@@ -1,10 +1,12 @@
 # Tapdeck
 
+![Tapdeck: your spare iPhone as a Stream Deck for your Mac](docs/images/hero.png)
+
 Turn a spare iPhone into a wireless Stream Deck for your Mac.
 
 Put an old phone on a stand next to your keyboard and get big, assignable buttons for anything you do often: keyboard shortcuts, apps, websites, shell commands, text snippets and Mac controls. A music page shows what's playing in your browser with artwork, a seek bar and playback controls.
 
-- **Assignable buttons**: pages of 10 big buttons each, designed in an editor on your Mac
+- **Assignable buttons**: pages of big buttons, designed in an editor on your Mac. Pick each page's grid (up to 6 × 4) and make any button wide, tall or 2 × 2.
   - **Shortcut**: press any key combination, e.g. ⌘⇧5
   - **Open**: launch an app, a website or a folder
   - **Command**: run a shell command in zsh, like your terminal does
@@ -13,6 +15,8 @@ Put an old phone on a stand next to your keyboard and get big, assignable button
 - **Now playing**: any browser tab that plays audio or video (YouTube, YouTube Music, Spotify Web, SoundCloud…), with artwork and seeking. When nothing plays in the browser, the buttons act as your keyboard's media keys, so desktop apps work too.
 - **Stats bar**: clock, CPU, RAM and battery
 - **Swipeable pages**, landscape-first, English and Turkish UI
+
+![A now-playing page, Mac controls and your own buttons in any size](docs/images/pages.png)
 
 Nothing to install on the phone: it's a web app you add to the home screen. The Mac side is one Python file that uses only the standard library, and it runs only while you want it to.
 
@@ -63,8 +67,13 @@ The extension only talks to `127.0.0.1:8765`. It runs on all sites so it can fin
 
 Open **<http://127.0.0.1:8765/edit>** in a browser on your Mac while Tapdeck is running.
 
-- Click an empty slot to add a button, or click a button to change it.
-- Drag buttons to rearrange them, or drop one on another page in the sidebar to move it there.
+![The button editor](docs/images/editor.png)
+
+- Click an empty cell to add a button, or click a button to change it.
+- Drag a button to move it, or drop it on another page in the sidebar. A green outline shows where it will land; red means it doesn't fit.
+- Drag the round handle on a selected button's corner to resize it, or pick a size (1 × 1, 2 × 1, 1 × 2, 2 × 2, 3 × 1).
+- Set each page's columns and rows above the grid. Buttons that no longer fit move to a free spot.
+- <kbd>Delete</kbd> removes the selected button, <kbd>Esc</kbd> clears the selection.
 - Pick a label, an emoji icon (⌃⌘Space opens the emoji picker) and a color.
 - Use **▶ Try it** to run a button on the Mac without touching your phone.
 - Add, rename, reorder and delete pages in the sidebar.
@@ -78,10 +87,17 @@ The editor only opens on the Mac itself. Buttons can run commands, so other devi
 | File | What it is |
 | --- | --- |
 | `Tapdeck.command` | Double-click to start Tapdeck |
-| `server.py` | The server: runs actions, serves the phone app and the editor |
-| `web/index.html` | The phone app |
-| `web/edit.html` | The button editor |
-| `web/common.js` | Icons and labels shared by both |
+| `server.py` | Starts the server (`--open`, `--install`, `--uninstall`) |
+| `tapdeck/` | The server, standard library only |
+| `tapdeck/handler.py` | HTTP routes, token and Mac-only checks |
+| `tapdeck/panel.py` | What each button and control does |
+| `tapdeck/deck.py` | Pages and buttons: validation, defaults, `deck.json` |
+| `tapdeck/media.py` | Now playing from the extension, media keys as fallback |
+| `tapdeck/keyboard.py` | Shortcuts, typed text and media keys |
+| `tapdeck/display.py`, `system.py`, `apps.py`, `shell.py` | Brightness; CPU, memory, battery, volume; apps and icons; running commands |
+| `web/index.html`, `web/js/phone.js`, `web/css/phone.css` | The phone app |
+| `web/edit.html`, `web/js/editor.js`, `web/css/editor.css` | The button editor |
+| `web/css/base.css`, `web/js/common.js` | Colors, the button tile, icons and labels shared by both |
 | `extension/` | Browser extension for now playing |
 | `config.json` | Created on first run: port and access token. Keep it private. |
 | `deck.json` | Created on first run: your pages and buttons |
@@ -101,12 +117,9 @@ The log goes to `~/Library/Logs/Tapdeck.log`. macOS asks for network and Accessi
 
 ## How it works
 
-```
-iPhone (web app) ──Wi-Fi──► server.py ──► osascript · pmset · open · zsh · CoreGraphics · DisplayServices
-                                 ▲
-                                 └── browser extension (localhost): tabs report what's playing
-                                     and receive commands through a long-poll
-```
+![iPhone, Tapdeck server, macOS and the browser extension](docs/images/how-it-works.png)
+
+The phone talks to the Tapdeck server over your Wi-Fi. The server runs actions with `osascript`, `pmset`, `open`, `zsh`, CoreGraphics and DisplayServices. The browser extension reports what's playing in your tabs over `localhost` and receives play/pause/seek commands through a long-poll.
 
 Security:
 
