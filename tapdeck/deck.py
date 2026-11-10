@@ -1,4 +1,4 @@
-"""The deck: pages of user-assigned buttons on a grid, stored in deck.json."""
+"""The deck: pages of user-assigned buttons and widgets on a grid, stored in deck.json."""
 
 import json
 import os
@@ -19,6 +19,16 @@ SYSTEM_ACTIONS = [
     "brightness_down", "brightness_up", "dark_mode", "caffeinate", "screenshot",
     "mission_control", "lock", "display_off", "sleep",
 ]
+
+# Live tiles the phone draws itself, with the smallest size (columns, rows)
+# each still works at. Labels, icons and preset sizes live in web/common.js.
+WIDGETS = {
+    "now_playing": (2, 1), "clock": (1, 1), "calendar": (1, 1),
+    "volume": (1, 1), "brightness": (1, 1), "stats": (1, 1),
+}
+
+# 2: the phone's fixed music page became a widget page.
+DECK_VERSION = 2
 
 ACTION_TYPES = ("hotkey", "open", "command", "text", "system", "none")
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -62,25 +72,34 @@ def bounded_int(value, low, high, default):
         return default
 
 
-def clean_button(b, cols, rows):
-    """A button placed on the page grid at (x, y), spanning w x h cells."""
+def clean_item(b, cols, rows):
+    """A button or widget placed on the page grid at (x, y), spanning w x h cells."""
     if not isinstance(b, dict):
         raise ValueError("bad button")
+    widget = b.get("widget")
+    if widget is not None and widget not in WIDGETS:
+        raise ValueError("bad widget")
     w = bounded_int(b.get("w"), 1, cols, 1)
     h = bounded_int(b.get("h"), 1, rows, 1)
     x, y = bounded_int(b.get("x"), 0, 99, 0), bounded_int(b.get("y"), 0, 99, 0)
     if x + w > cols or y + h > rows:
         raise ValueError("button outside the grid")
+    min_w, min_h = WIDGETS.get(widget, (1, 1))
+    if w < min_w or h < min_h:
+        raise ValueError("widget too small")
     bid = str(b.get("id") or "")
+    item = {"id": bid if ID_RE.match(bid) else new_id(), "x": x, "y": y, "w": w, "h": h}
+    if widget:
+        item["widget"] = widget
+        return item
     color = str(b.get("color") or "")
-    return {
-        "id": bid if ID_RE.match(bid) else new_id(),
-        "label": str(b.get("label") or "")[:40],
-        "icon": str(b.get("icon") or "")[:16],
-        "color": color if COLOR_RE.match(color) else "",
-        "action": clean_action(b.get("action") or {"type": "none"}),
-        "x": x, "y": y, "w": w, "h": h,
-    }
+    item.update(
+        label=str(b.get("label") or "")[:40],
+        icon=str(b.get("icon") or "")[:16],
+        color=color if COLOR_RE.match(color) else "",
+        action=clean_action(b.get("action") or {"type": "none"}),
+    )
+    return item
 
 
 def clean_page(p, ids):
@@ -97,7 +116,7 @@ def clean_page(p, ids):
             continue
         if legacy:
             b = dict(b, x=i % DEFAULT_COLS, y=i // DEFAULT_COLS, w=1, h=1)
-        b = clean_button(b, cols, rows)
+        b = clean_item(b, cols, rows)
         cells = {(cx, cy) for cx in range(b["x"], b["x"] + b["w"])
                  for cy in range(b["y"], b["y"] + b["h"])}
         if cells & taken:
@@ -115,7 +134,20 @@ def clean_deck(deck):
     if not isinstance(pages, list) or not pages or len(pages) > MAX_PAGES:
         raise ValueError("bad pages")
     ids = set()
-    return {"pages": [clean_page(p, ids) for p in pages]}
+    cleaned = [clean_page(p, ids) for p in pages]
+    has_player = any(b.get("widget") == "now_playing" for p in cleaned for b in p["buttons"])
+    if deck.get("v", 1) < DECK_VERSION and not has_player and len(cleaned) < MAX_PAGES:
+        # Older decks had a fixed music page before the button pages; keep it,
+        # now as a page of widgets the user can move, resize or delete.
+        cleaned.insert(0, clean_page(music_page(), ids))
+    return {"v": DECK_VERSION, "pages": cleaned}
+
+
+def music_page():
+    return {"name": "Müzik" if mac_speaks_turkish() else "Music", "cols": 5, "rows": 4, "buttons": [
+        {"widget": "now_playing", "x": 0, "y": 0, "w": 5, "h": 3},
+        {"widget": "volume", "x": 0, "y": 3, "w": 5, "h": 1},
+    ]}
 
 
 def default_deck():
@@ -152,7 +184,8 @@ def default_deck():
         system("media_prev"), dict(system("media_toggle"), w=2), system("media_next"),
         system("mute"),
     ]
-    return clean_deck({"pages": [
+    return clean_deck({"v": DECK_VERSION, "pages": [
+        music_page(),
         {"name": "Kontroller" if tr else "Controls", "buttons": flow(controls)},
         {"name": "Uygulamalar" if tr else "Apps", "buttons": flow(apps)},
         {"name": "Örnekler" if tr else "Examples", "buttons": flow(examples)},
@@ -203,15 +236,18 @@ class Deck:
 
     def full(self):
         with self.lock:
-            return {"version": self.version, "pages": self.data["pages"]}
+            return {"v": DECK_VERSION, "version": self.version, "pages": self.data["pages"]}
 
     def public(self):
-        """What the phone needs to draw buttons: no commands or texts."""
+        """What the phone needs to draw buttons and widgets: no commands or texts."""
         with self.lock:
             pages = []
             for p in self.data["pages"]:
                 buttons = []
                 for b in p["buttons"]:
+                    if "widget" in b:
+                        buttons.append(dict(b))
+                        continue
                     a = b["action"]
                     is_app = a["type"] == "open" and a["target"].endswith(".app")
                     buttons.append({
@@ -226,9 +262,10 @@ class Deck:
             return {"version": self.version, "pages": pages}
 
     def find(self, button_id):
+        """The button with this id (widgets have no action to run)."""
         with self.lock:
             for p in self.data["pages"]:
                 for b in p["buttons"]:
-                    if b["id"] == button_id:
+                    if b["id"] == button_id and "action" in b:
                         return b
         return None

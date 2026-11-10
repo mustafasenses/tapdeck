@@ -85,6 +85,8 @@ class Panel:
             return self._result(*self.media.command("seek", float(value)))
         if name == "volume":
             return {"ok": self.set_volume(int(value))}
+        if name == "brightness":
+            return {"ok": self.brightness.set(float(value))}
         if name in SYSTEM_ACTIONS:
             return self.system(name)
         return {"ok": False, "error": "bad_request"}
