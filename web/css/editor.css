@@ -74,6 +74,12 @@ aside, section { min-height: 0; overflow-y: auto; }
 .key.selected { outline-color: var(--accent); }
 .key.lifted { opacity: .35; }
 .key .inner { pointer-events: none; }
+.key.enter { animation: key-in .45s cubic-bezier(.2, .9, .3, 1.15) both; animation-delay: calc(var(--i, 0) * 25ms); }
+.key.pop { animation: pop .45s cubic-bezier(.34, 1.56, .64, 1); }
+.inspector.fresh > * { animation: fade-up .3s cubic-bezier(.2, .8, .2, 1) both; }
+.inspector.fresh > :nth-child(2) { animation-delay: 30ms; }
+.inspector.fresh > :nth-child(3) { animation-delay: 60ms; }
+.inspector.fresh > :nth-child(n+4) { animation-delay: 90ms; }
 .key .badge { position: absolute; top: 8px; right: 8px; opacity: .55; pointer-events: none; }
 .key .badge .ico { width: 14px; height: 14px; color: var(--text); }
 .handle {

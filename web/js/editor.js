@@ -2,6 +2,7 @@
   const TOKEN = document.querySelector('meta[name="tapdeck-token"]').content;
   const { ICONS, SYSTEM, systemById, COLORS, GRID } = window.Tapdeck;
   const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const TYPES = [
     { id: 'hotkey', icon: 'keyboard', name: 'Shortcut', desc: 'Press a key combination, like ⌘⇧5' },
@@ -204,9 +205,16 @@
   }
   function letter(name) { const d = document.createElement('div'); d.className = 'letter'; d.textContent = (name || '?')[0]; return d; }
 
+  // Where each button was before the last render, so moved and resized
+  // buttons can glide to their new place instead of jumping (FLIP).
+  let boardPage = null;
   function renderBoard() {
     const board = $('board');
     const p = page();
+    const before = new Map();
+    const samePage = boardPage === pageIndex;
+    if (samePage) board.querySelectorAll('.key[data-id]').forEach((el) => before.set(el.dataset.id, el.getBoundingClientRect()));
+    boardPage = pageIndex;
     board.innerHTML = '';
     board.style.setProperty('--cols', p.cols);
     board.style.setProperty('--rows', p.rows);
@@ -225,6 +233,7 @@
     p.buttons.forEach((b) => {
       const el = document.createElement('div');
       el.className = 'key' + (selected && selected.id === b.id ? ' selected' : '');
+      el.dataset.id = b.id;
       if (b.color) { el.classList.add('colored'); el.style.setProperty('--c', b.color); }
       place(el, b.x, b.y, b.w, b.h);
       el.appendChild(keyContent(b));
@@ -236,6 +245,24 @@
       el.appendChild(handle);
       el.addEventListener('pointerdown', (e) => startDrag(e, b, el, e.target === handle ? 'resize' : 'move'));
       board.appendChild(el);
+    });
+    animateBoard(before, samePage);
+  }
+
+  function animateBoard(before, samePage) {
+    if (reduceMotion) return;
+    $('board').querySelectorAll('.key[data-id]').forEach((el, i) => {
+      if (!samePage) { el.style.setProperty('--i', i); el.classList.add('enter'); return; }
+      const old = before.get(el.dataset.id);
+      if (!old) { el.classList.add('pop'); return; }
+      const now = el.getBoundingClientRect();
+      const dx = old.left - now.left, dy = old.top - now.top;
+      const sx = old.width / now.width, sy = old.height / now.height;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return;
+      el.animate([
+        { transformOrigin: 'top left', transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+        { transformOrigin: 'top left', transform: 'none' },
+      ], { duration: 420, easing: 'cubic-bezier(.2, .9, .3, 1.1)' });
     });
   }
 
@@ -335,9 +362,14 @@
     return { type: 'none' };
   }
 
+  // The panel slides in when the selection changes, not on every edit.
+  let inspected = null;
   function renderInspector() {
     const box = $('inspector');
     box.innerHTML = '';
+    const key = selected ? (selected.id || `${pageIndex}:${selected.x},${selected.y}`) : null;
+    if (key !== inspected && !reduceMotion) { box.classList.remove('fresh'); void box.offsetWidth; box.classList.add('fresh'); }
+    inspected = key;
     if (!selected) {
       box.append(h('h2', {}, 'Nothing selected'), h('p', { class: 'empty-state' }, 'Click a button on the left to change it, or an empty cell to add a new one.'));
       return;
