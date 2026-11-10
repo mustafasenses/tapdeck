@@ -1,4 +1,4 @@
-"""Command line entry point: python3 server.py [--open | --install | --uninstall]."""
+"""Command line entry point: python3 server.py [--open | --make-app | --install | --uninstall]."""
 
 import sys
 from http.server import ThreadingHTTPServer
@@ -6,6 +6,7 @@ from http.server import ThreadingHTTPServer
 from .config import load_config
 from .handler import Handler, phone_urls
 from .launchd import install, uninstall
+from .macapp import make_app
 from .panel import Panel
 from .shell import run
 
@@ -18,6 +19,8 @@ def main():
         return install()
     if "--uninstall" in sys.argv:
         return uninstall()
+    if "--make-app" in sys.argv:
+        return make_app()
     cfg = load_config()
     Handler.panel = Panel(cfg)
 

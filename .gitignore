@@ -3,5 +3,6 @@ config.json
 deck.json
 
 .cache/
+Tapdeck.app/
 __pycache__/
 .DS_Store
