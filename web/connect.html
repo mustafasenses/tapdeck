@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tapdeck – Connect</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b10;color:#f4f4f8;
+       font:16px -apple-system,BlinkMacSystemFont,sans-serif}
+  .card{background:#16161f;border:1px solid #262633;border-radius:20px;padding:32px;max-width:420px;text-align:center}
+  #qr{background:#fff;padding:16px;border-radius:12px;display:inline-block;margin:20px 0}
+  h1{font-size:22px;margin:0 0 8px} p{color:#a3a3b5;line-height:1.5;margin:8px 0}
+  code{display:block;word-break:break-all;background:#0b0b10;border-radius:8px;padding:10px;margin-top:12px;font-size:13px;color:#c9c3ff}
+  a{color:#c9c3ff}
+</style></head><body><div class="card">
+<h1>Scan with your iPhone</h1>
+<p>Open the camera, scan the code, then in Safari tap <b>Share → Add to Home Screen</b>.</p>
+<div id="qr"></div>
+<p>Or open this address:</p><code>__URL__</code>
+<p style="font-size:13px">If the phone can't reach it, try: <code>__ALT__</code></p>
+<p><a href="/edit">Edit buttons →</a></p>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>new QRCode(document.getElementById('qr'),{text:"__URL__",width:220,height:220});</script>
+</body></html>
