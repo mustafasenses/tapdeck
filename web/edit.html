@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/icon.png">
+<title>Tapdeck Editor</title>
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/editor.css">
+<meta name="tapdeck-token" content="__TOKEN__">
+</head>
+<body>
+
+<header>
+  <div class="brand"><img src="/icon.png" alt=""> Tapdeck <small>Button editor</small></div>
+  <div class="save-status" id="saveStatus"></div>
+  <a class="btn" href="/connect" target="_blank">Connect phone</a>
+</header>
+<div class="banner" id="axBanner" hidden>
+  <span id="axText">Shortcuts, typing text and media keys need Accessibility permission for the app running Tapdeck (e.g. Terminal).</span>
+  <button class="btn small" id="axButton">Ask for permission</button>
+</div>
+
+<main id="main">
+  <aside class="sidebar">
+    <h3>Pages</h3>
+    <div class="page-item fixed">🎵 Music (always first)</div>
+    <div id="pageList"></div>
+    <button class="btn" id="addPage">+ Add page</button>
+  </aside>
+
+  <section class="canvas">
+    <div class="toolbar">
+      <input type="text" id="pageName" maxlength="30" placeholder="Page name">
+      <div class="stepper"><span>Columns</span><button id="colsDown">−</button><b id="cols"></b><button id="colsUp">+</button></div>
+      <div class="stepper"><span>Rows</span><button id="rowsDown">−</button><b id="rows"></b><button id="rowsUp">+</button></div>
+      <div class="spacer"></div>
+      <button class="btn small" id="pageLeft" title="Move page left">←</button>
+      <button class="btn small" id="pageRight" title="Move page right">→</button>
+      <button class="btn small danger" id="deletePage">Delete page</button>
+    </div>
+    <div class="phone"><div class="board" id="board"></div></div>
+    <p class="hint">Click an empty cell to add a button. Drag a button to move it, or drop it on another page on the left. Drag the corner handle to make it bigger or smaller. <kbd>Delete</kbd> removes the selected button.</p>
+  </section>
+
+  <aside class="inspector" id="inspector"></aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/js/common.js"></script>
+<script src="/js/editor.js"></script>
+</body>
+</html>
