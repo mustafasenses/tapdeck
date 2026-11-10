@@ -1,6 +1,6 @@
 (() => {
   const TOKEN = document.querySelector('meta[name="tapdeck-token"]').content;
-  const { ICONS, SYSTEM, systemById, COLORS, GRID } = window.Tapdeck;
+  const { ICONS, SYSTEM, systemById, WIDGETS, widgetById, COLORS, GRID } = window.Tapdeck;
   const $ = (id) => document.getElementById(id);
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -22,6 +22,8 @@
   };
   const keyName = (code) => KEY_NAMES[code] || code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'Num ');
   const sysName = (id) => (systemById(id) || {}).en || id;
+  // Widgets can't be made smaller than this (columns, rows); buttons go down to 1 x 1.
+  const minSize = (b) => (b.widget ? widgetById(b.widget).min : [1, 1]);
 
   // ------------------------------------------------------------------ state
   let deck = { pages: [] };
@@ -102,22 +104,40 @@
   }
 
   // ------------------------------------------------------------------ pages
+  const GRIP = '<svg class="grip" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></svg>';
+
   function renderPages() {
     const list = $('pageList');
+    // Where each page sat before, so reordered pages slide into place.
+    const before = new Map([...list.children].map((el) => [el.dataset.key, el.getBoundingClientRect().top]));
     list.innerHTML = '';
     deck.pages.forEach((p, i) => {
+      if (!p.key) Object.defineProperty(p, 'key', { value: newId(), enumerable: false });
       const el = document.createElement('div');
       el.className = 'page-item' + (i === pageIndex ? ' active' : '');
       el.dataset.page = i;
+      el.dataset.key = p.key;
+      el.draggable = true;
+      el.title = 'Drag to reorder';
+      el.insertAdjacentHTML('beforeend', GRIP);
       const name = document.createElement('span');
+      name.className = 'name';
       name.textContent = p.name || `Page ${i + 1}`;
       const count = document.createElement('span');
       count.className = 'count';
       count.textContent = p.buttons.length;
       el.append(name, count);
       el.addEventListener('click', () => { pageIndex = i; selected = null; renderAll(); });
+      dragPages(el, i);
       list.appendChild(el);
     });
+    if (!reduceMotion) {
+      [...list.children].forEach((el) => {
+        const top = before.get(el.dataset.key);
+        const dy = top === undefined ? 0 : top - el.getBoundingClientRect().top;
+        if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(.2, .9, .3, 1.1)' });
+      });
+    }
     const p = page();
     $('pageName').value = p.name;
     $('cols').textContent = p.cols;
@@ -131,9 +151,46 @@
     $('addPage').disabled = deck.pages.length >= 20;
   }
 
+  // Drag pages in the sidebar to reorder them; a line shows where it will go.
+  let draggedPage = null;
+  function dragPages(el, i) {
+    const clear = () => document.querySelectorAll('.drop-before, .drop-after').forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+    el.addEventListener('dragstart', (e) => {
+      draggedPage = i;
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+    });
+    el.addEventListener('dragend', () => { draggedPage = null; el.classList.remove('dragging'); clear(); });
+    el.addEventListener('dragover', (e) => {
+      if (draggedPage === null) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      clear();
+      el.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    el.addEventListener('drop', (e) => {
+      if (draggedPage === null) return;
+      e.preventDefault();
+      const after = el.classList.contains('drop-after');
+      clear();
+      const from = draggedPage;
+      let to = i + (after ? 1 : 0);
+      if (from < to) to -= 1;
+      draggedPage = null;
+      if (from === to) return;
+      const current = deck.pages[pageIndex];
+      const [moved] = deck.pages.splice(from, 1);
+      deck.pages.splice(to, 0, moved);
+      pageIndex = deck.pages.indexOf(current);
+      changed({ pages: true });
+    });
+  }
+
   $('pageName').addEventListener('input', (e) => { page().name = e.target.value; changed({ board: false }); renderPageNames(); });
   function renderPageNames() {
-    [...$('pageList').children].forEach((el, i) => { el.firstChild.textContent = deck.pages[i].name || `Page ${i + 1}`; });
+    [...$('pageList').children].forEach((el, i) => { el.querySelector('.name').textContent = deck.pages[i].name || `Page ${i + 1}`; });
   }
   $('addPage').addEventListener('click', () => {
     deck.pages.push({ name: `Page ${deck.pages.length + 1}`, cols: GRID.cols, rows: GRID.rows, buttons: [] });
@@ -167,9 +224,10 @@
     const outside = [];
     p.buttons.forEach((b) => (b.x + b.w <= next.cols && b.y + b.h <= next.rows ? next.buttons : outside).push({ ...b }));
     for (const b of outside) {
-      b.w = Math.min(b.w, next.cols); b.h = Math.min(b.h, next.rows);
+      const [mw, mh] = minSize(b);
+      b.w = Math.max(mw, Math.min(b.w, next.cols)); b.h = Math.max(mh, Math.min(b.h, next.rows));
       let spot = freeSpot(next, b.w, b.h);
-      if (!spot) { b.w = 1; b.h = 1; spot = freeSpot(next, 1, 1); }
+      if (!spot) { b.w = mw; b.h = mh; spot = freeSpot(next, mw, mh); }
       if (!spot) return toast('Not enough room. Remove or shrink some buttons first.');
       Object.assign(b, spot);
       next.buttons.push(b);
@@ -186,6 +244,12 @@
   function keyContent(b) {
     const inner = document.createElement('span');
     inner.className = 'inner';
+    if (b.widget) {
+      const w = widgetById(b.widget);
+      inner.insertAdjacentHTML('beforeend', ICONS[w.icon]);
+      const s = document.createElement('span'); s.className = 'label'; s.textContent = w.en; inner.appendChild(s);
+      return inner;
+    }
     const a = b.action;
     const sys = a.type === 'system' && systemById(a.id);
     if (b.icon) {
@@ -235,9 +299,10 @@
       el.className = 'key' + (selected && selected.id === b.id ? ' selected' : '');
       el.dataset.id = b.id;
       if (b.color) { el.classList.add('colored'); el.style.setProperty('--c', b.color); }
+      if (b.widget) el.classList.add('widget-tile');
       place(el, b.x, b.y, b.w, b.h);
       el.appendChild(keyContent(b));
-      const type = TYPES.find((x) => x.id === b.action.type);
+      const type = b.widget ? { icon: 'widget' } : TYPES.find((x) => x.id === b.action.type);
       if (type && type.id !== 'system') el.insertAdjacentHTML('beforeend', `<span class="badge">${ICONS[type.icon]}</span>`);
       const handle = document.createElement('div');
       handle.className = 'handle';
@@ -273,6 +338,7 @@
     const p = page();
     const start = cellAt(e.clientX, e.clientY);
     const grab = { dx: start.x - b.x, dy: start.y - b.y };
+    const [mw, mh] = minSize(b);
     const sx = e.clientX, sy = e.clientY;
     let ghost = null, target = null, dropPage = null, moved = false;
 
@@ -293,7 +359,7 @@
       const c = cellAt(ev.clientX, ev.clientY);
       target = mode === 'move'
         ? { x: Math.max(0, Math.min(p.cols - b.w, c.x - grab.dx)), y: Math.max(0, Math.min(p.rows - b.h, c.y - grab.dy)), w: b.w, h: b.h }
-        : { x: b.x, y: b.y, w: Math.max(1, c.x - b.x + 1), h: Math.max(1, c.y - b.y + 1) };
+        : { x: b.x, y: b.y, w: Math.max(mw, c.x - b.x + 1), h: Math.max(mh, c.y - b.y + 1) };
       place(ghost, target.x, target.y, target.w, target.h);
       ghost.classList.toggle('bad', !fits(p, target.x, target.y, target.w, target.h, b.id));
     };
@@ -316,8 +382,10 @@
 
   function moveToPage(b, i) {
     const dest = deck.pages[i];
-    let spot = freeSpot(dest, b.w, b.h), w = b.w, h = b.h;
-    if (!spot) { spot = freeSpot(dest, 1, 1); w = 1; h = 1; }
+    const [mw, mh] = minSize(b);
+    let w = Math.min(b.w, dest.cols), h = Math.min(b.h, dest.rows);
+    let spot = freeSpot(dest, w, h);
+    if (!spot) { w = mw; h = mh; spot = freeSpot(dest, w, h); }
     if (!spot) { toast(`"${dest.name}" is full.`); return renderBoard(); }
     page().buttons = page().buttons.filter((x) => x !== b);
     dest.buttons.push(Object.assign(b, spot, { w, h }));
@@ -362,6 +430,57 @@
     return { type: 'none' };
   }
 
+  function add(item) {
+    const nb = { id: newId(), ...item, x: selected.x, y: selected.y };
+    page().buttons.push(nb);
+    selected = { id: nb.id };
+    changed({ pages: true, inspector: true });
+  }
+
+  // A widget starts at its first preset that fits at the chosen cell.
+  function addWidget(w) {
+    const p = page();
+    const size = [...w.sizes, w.min].find(([cw, ch]) => fits(p, selected.x, selected.y, cw, ch));
+    if (!size) return toast(`Not enough room here for ${w.en} (needs ${w.min[0]} × ${w.min[1]}).`);
+    add({ widget: w.id, w: size[0], h: size[1] });
+  }
+
+  function sizeButtons(b, presets) {
+    const sizes = h('div', { class: 'sizes' });
+    presets.forEach(([w, hh]) => {
+      const ok = fits(page(), b.x, b.y, w, hh, b.id);
+      const cells = Array.from({ length: w * hh }, () => h('b'));
+      const icon = h('i', {}, cells);
+      icon.style.gridTemplateColumns = `repeat(${w}, 9px)`;
+      sizes.append(h('button', {
+        class: 'size' + (b.w === w && b.h === hh ? ' active' : ''), disabled: !ok, title: `${w} × ${hh}`,
+        onclick: () => { Object.assign(b, { w, h: hh }); changed({ inspector: true }); },
+      }, icon));
+    });
+    return sizes;
+  }
+
+  const WIDGET_HINTS = {
+    now_playing: 'What\'s playing in your browser, with artwork, a seek bar and controls. One row high, it shows a compact player.',
+    clock: 'The time and date, sized to fit.',
+    calendar: 'Today\'s date on small tiles; the whole month from 2 × 2 up.',
+    volume: 'A bar to drag, with mute. Make it tall for a vertical slider.',
+    brightness: 'Your Mac\'s built-in display. Make it tall for a vertical slider.',
+    stats: 'CPU, memory and battery.',
+  };
+
+  function renderWidgetInspector(box, b) {
+    const w = widgetById(b.widget);
+    box.append(
+      h('h2', {}, w.en),
+      h('div', { class: 'section' },
+        h('p', { class: 'empty-state' }, WIDGET_HINTS[b.widget] || ''),
+        h('div', { class: 'field' }, h('span', { class: 'field-title' }, 'Size'), sizeButtons(b, w.sizes),
+          h('div', { class: 'hint' }, `Or drag the round handle on its corner. Smallest: ${w.min[0]} × ${w.min[1]}.`))),
+      h('div', { class: 'actions' }, h('button', { class: 'btn danger', onclick: deleteSelected }, 'Delete widget')),
+    );
+  }
+
   // The panel slides in when the selection changes, not on every edit.
   let inspected = null;
   function renderInspector() {
@@ -377,20 +496,21 @@
     const b = current();
 
     if (!b) {
-      box.append(h('h2', {}, 'New button'), h('p', { class: 'empty-state' }, 'What should this button do?'));
+      box.append(h('h2', {}, 'Add here'), h('p', { class: 'empty-state' }, 'A button that does something:'));
       const chooser = h('div', { class: 'chooser' });
       TYPES.forEach((type) => chooser.append(h('button', {
         class: 'type', html: `${ICONS[type.icon]}<div>${type.name}<small>${type.desc}</small></div>`,
-        onclick: () => {
-          const nb = { id: newId(), label: '', icon: '', color: '', action: defaultAction(type.id), x: selected.x, y: selected.y, w: 1, h: 1 };
-          page().buttons.push(nb);
-          selected = { id: nb.id };
-          changed({ pages: true, inspector: true });
-        },
+        onclick: () => add({ label: '', icon: '', color: '', action: defaultAction(type.id), w: 1, h: 1 }),
       })));
-      box.append(chooser);
+      const widgets = h('div', { class: 'widget-choices' });
+      WIDGETS.forEach((w) => widgets.append(h('button', {
+        class: 'type', html: ICONS[w.icon] + w.en, onclick: () => addWidget(w),
+      })));
+      box.append(chooser, h('p', { class: 'empty-state' }, 'Or a widget:'), widgets);
       return;
     }
+
+    if (b.widget) return renderWidgetInspector(box, b);
 
     const title = b.label || (b.action.type === 'system' ? sysName(b.action.id) : 'Button');
 
@@ -410,17 +530,7 @@
     });
 
     // -- size
-    const sizes = h('div', { class: 'sizes' });
-    SIZES.forEach(([w, hh]) => {
-      const ok = fits(page(), b.x, b.y, w, hh, b.id);
-      const cells = Array.from({ length: w * hh }, () => h('b'));
-      const icon = h('i', {}, cells);
-      icon.style.gridTemplateColumns = `repeat(${w}, 9px)`;
-      sizes.append(h('button', {
-        class: 'size' + (b.w === w && b.h === hh ? ' active' : ''), disabled: !ok, title: `${w} × ${hh}`,
-        onclick: () => { Object.assign(b, { w, h: hh }); changed({ inspector: true }); },
-      }, icon));
-    });
+    const sizes = sizeButtons(b, SIZES);
 
     const look = h('div', { class: 'section' },
       h('label', { class: 'field' }, h('span', { class: 'field-title' }, 'Label'), labelInput),

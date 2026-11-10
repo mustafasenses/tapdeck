@@ -42,13 +42,24 @@ aside, section { min-height: 0; overflow-y: auto; }
 
 /* ---------- pages list ---------- */
 .sidebar h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 8px 10px; }
-.page-item { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: 600; border: 1px solid transparent; }
+#pageList { display: flex; flex-direction: column; gap: 6px; }
+.page-item { position: relative; display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: 600; border: 1px solid transparent; }
+.page-item .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The grip says "drag me"; the whole row can be dragged to reorder pages. */
+.page-item .grip { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; cursor: grab; transition: stroke .15s; }
+.page-item:hover .grip { stroke: var(--muted); }
+.page-item.dragging { opacity: .4; }
+.page-item.drop-before::before, .page-item.drop-after::after {
+  content: ""; position: absolute; left: 6px; right: 6px; height: 3px; border-radius: 2px; background: var(--accent);
+}
+.page-item.drop-before::before { top: -5px; }
+.page-item.drop-after::after { bottom: -5px; }
 .page-item:hover { background: var(--card); }
 .page-item.active { background: var(--card-hover); border-color: var(--line); }
 .page-item.fixed { color: var(--faint); cursor: default; }
 .page-item.fixed:hover { background: none; }
 .page-item.drop { border-color: var(--accent); background: rgba(139,124,255,.15); }
-.page-item .count { margin-left: auto; color: var(--faint); font-size: 12px; font-weight: 500; }
+.page-item .count { color: var(--faint); font-size: 12px; font-weight: 500; }
 .sidebar .btn { width: 100%; justify-content: center; margin-top: 10px; }
 
 /* ---------- page toolbar ---------- */
@@ -80,6 +91,11 @@ aside, section { min-height: 0; overflow-y: auto; }
 .inspector.fresh > :nth-child(2) { animation-delay: 30ms; }
 .inspector.fresh > :nth-child(3) { animation-delay: 60ms; }
 .inspector.fresh > :nth-child(n+4) { animation-delay: 90ms; }
+/* Widgets on the board: a tinted tile with the widget's icon and name. */
+.key.widget-tile { background: linear-gradient(135deg, rgba(139,124,255,.22), rgba(178,107,255,.07)); }
+.key.widget-tile .ico { color: #c9c3ff; }
+.widget-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.chooser + .empty-state { margin-top: 18px; }
 .key .badge { position: absolute; top: 8px; right: 8px; opacity: .55; pointer-events: none; }
 .key .badge .ico { width: 14px; height: 14px; color: var(--text); }
 .handle {
