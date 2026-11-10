@@ -30,6 +30,37 @@
   document.documentElement.lang = LANG;
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Restart a CSS animation class on an element.
+  function replay(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+
+  // In portrait the screen is turned 90° (see phone.css), so a touch's
+  // position inside an element comes from the other axis.
+  const turned = window.matchMedia('(orientation: portrait)');
+  function pointIn(el, e) {
+    const r = el.getBoundingClientRect();
+    return turned.matches
+      ? { x: e.clientY - r.top, y: r.right - e.clientX, w: r.height, h: r.width }
+      : { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
+  }
+
+  // A ripple from where the finger touched.
+  function ripple(el, e) {
+    if (reduceMotion) return;
+    const p = pointIn(el, e);
+    const size = Math.max(p.w, p.h) * 2.2;
+    const dot = document.createElement('span');
+    dot.className = 'ripple';
+    dot.style.cssText = `width:${size}px;height:${size}px;left:${p.x - size / 2}px;top:${p.y - size / 2}px`;
+    el.appendChild(dot);
+    dot.addEventListener('animationend', () => dot.remove());
+  }
+
+  // Green glow if the Mac did it, a shake if it didn't.
+  function feedback(el, result) {
+    if (!reduceMotion) replay(el, result && result.ok ? 'ok' : 'fail');
+  }
   $('prev').innerHTML = ICONS.prev;
   $('next').innerHTML = ICONS.next;
 
@@ -99,7 +130,7 @@
       Object.assign(this, { el, max, onInput, onChange, onDraw, value: 0, dragging: false, holdUntil: 0 });
       this.fill = el.querySelector('.fill');
       el.addEventListener('pointerdown', (e) => {
-        this.dragging = true; el.setPointerCapture(e.pointerId); el.classList.add('active'); this.move(e);
+        this.dragging = true; try { el.setPointerCapture(e.pointerId); } catch {} el.classList.add('active'); this.move(e);
       });
       el.addEventListener('pointermove', (e) => { if (this.dragging) this.move(e); });
       const end = () => {
@@ -112,8 +143,8 @@
       el.addEventListener('pointercancel', end);
     }
     move(e) {
-      const r = this.el.getBoundingClientRect();
-      this.draw(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * this.max);
+      const p = pointIn(this.el, e);
+      this.draw(Math.min(1, Math.max(0, p.x / p.w)) * this.max);
       this.onInput && this.onInput(this.value);
     }
     draw(v) {
@@ -139,28 +170,67 @@
   const pageNames = [''];
   const pageCount = () => pagesEl.children.length;
   const currentPage = () => Math.round(pagesEl.scrollLeft / pagesEl.clientWidth);
+  let shownPage = -1;
   function renderDots() {
     $('dots').innerHTML = '';
     for (let i = 0; i < pageCount(); i++) {
       const b = document.createElement('button');
       b.setAttribute('aria-label', pageNames[i] || `Page ${i + 1}`);
+      b.appendChild(document.createElement('span'));
       b.addEventListener('click', () => goTo(i, true));
       $('dots').appendChild(b);
     }
-    markPage(currentPage());
+    followScroll();
   }
   function goTo(i, smooth) {
-    pagesEl.scrollTo({ left: i * pagesEl.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+    pagesEl.scrollTo({ left: i * pagesEl.clientWidth, behavior: smooth && !reduceMotion ? 'smooth' : 'auto' });
     markPage(i);
+    followScroll();
   }
   function markPage(i) {
-    [...$('dots').children].forEach((d, n) => d.classList.toggle('active', n === i));
+    if (i === shownPage) return;
+    shownPage = i;
     try { localStorage.setItem('tapdeckPage', String(i)); } catch {}
+    const page = pagesEl.children[i];
+    if (page && page.classList.contains('deck-page') && !reduceMotion) {
+      replay(page, 'enter');
+      clearTimeout(page.enterTimer);
+      page.enterTimer = setTimeout(() => page.classList.remove('enter'), 1200);
+    }
   }
   function savedPage() {
     try { return Math.min(pageCount() - 1, Number(localStorage.getItem('tapdeckPage')) || 0); } catch { return 0; }
   }
-  pagesEl.addEventListener('scroll', throttle(() => markPage(currentPage()), 100));
+
+  // While swiping, pages away from the center shrink and fade a little, and
+  // the dots stretch toward the page you're heading to.
+  let scrollFrame = 0;
+  let settleTimer = null;
+  function followScroll() {
+    scrollFrame = 0;
+    const pos = pagesEl.scrollLeft / (pagesEl.clientWidth || 1);
+    $('ambient').style.setProperty('--show', Math.max(0, 1 - pos).toFixed(3));
+    if (!reduceMotion) {
+      [...pagesEl.children].forEach((page, i) => {
+        const body = page.querySelector('.music, .deck');
+        const d = Math.min(1, Math.abs(i - pos));
+        if (body) {
+          body.style.transform = d > 0.001 ? `scale(${1 - 0.08 * d})` : '';
+          body.style.opacity = d > 0.001 ? String(1 - 0.45 * d) : '';
+        }
+      });
+    }
+    [...$('dots').children].forEach((dot, i) => {
+      const near = Math.max(0, 1 - Math.abs(i - pos));
+      dot.firstChild.style.width = 7 + 13 * near + 'px';
+      dot.classList.toggle('active', near > 0.5);
+    });
+  }
+  pagesEl.addEventListener('scroll', () => {
+    if (!scrollFrame) scrollFrame = requestAnimationFrame(followScroll);
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => markPage(currentPage()), 120);
+  }, { passive: true });
   window.addEventListener('resize', () => goTo(savedPage()));
 
   // ------------------------------------------------------------------ media
@@ -179,29 +249,65 @@
     return Math.min(media.duration || Infinity, (media.position || 0) + (Date.now() - mediaAt) / 1000);
   }
 
-  function renderPlayButton(playing) { $('play').innerHTML = playing ? ICONS.pause : ICONS.play; }
+  let shownPlaying = null;
+  function renderPlayButton(playing) {
+    if (playing === shownPlaying) return;
+    const first = shownPlaying === null;
+    shownPlaying = playing;
+    $('play').innerHTML = playing ? ICONS.pause : ICONS.play;
+    if (!first && !reduceMotion) replay($('play'), 'morph');
+  }
 
+  // Set text, sliding it in when it actually changed (a new track).
+  function setText(el, text) {
+    if (el.textContent === text) return;
+    const first = !el.textContent;
+    el.textContent = text;
+    if (!first && !reduceMotion) replay(el, 'swap');
+  }
+
+  // Artwork and the glow behind the page cross-fade to the new image.
   let lastArt = null;
+  function showArtwork(url) {
+    lastArt = url;
+    const boxes = [$('art'), $('ambient')];
+    if (!url) {
+      boxes.forEach((box) => box.querySelectorAll('.layer').forEach(fadeOut));
+      $('art').classList.remove('loaded');
+      return;
+    }
+    const probe = new Image();
+    probe.onload = () => {
+      if (lastArt !== url) return;
+      boxes.forEach((box) => {
+        const old = [...box.querySelectorAll('.layer')];
+        const img = new Image();
+        img.className = 'layer';
+        img.alt = '';
+        img.src = url;
+        box.appendChild(img);
+        void img.offsetWidth; // start from the hidden state so the fade runs
+        img.classList.add('in');
+        old.forEach(fadeOut);
+      });
+      $('art').classList.add('loaded');
+    };
+    probe.src = url;
+  }
+  function fadeOut(el) { el.classList.remove('in'); setTimeout(() => el.remove(), 900); }
+
   function renderMedia() {
     const ext = media.source === 'ext';
     $('source').classList.toggle('live', ext && media.playing);
     $('sourceText').textContent = ext ? media.site : t('keysTitle');
-    $('title').textContent = ext ? (media.title || media.site) : t('keysTitle');
-    $('artist').textContent = ext ? [media.artist, media.album].filter(Boolean).join(' · ') : t('keysArtist');
+    setText($('title'), ext ? (media.title || media.site) : t('keysTitle'));
+    setText($('artist'), ext ? [media.artist, media.album].filter(Boolean).join(' · ') : t('keysArtist'));
     $('note').hidden = ext || media.keys !== false;
     $('note').textContent = t('keysOff');
     if (Date.now() > optimisticUntil) renderPlayButton(ext && media.playing);
 
     const art = ext ? media.artwork : '';
-    if (art !== lastArt) {
-      lastArt = art;
-      $('art').classList.remove('loaded');
-      if (art) {
-        const img = $('artImg');
-        img.onload = () => { if (lastArt === art) $('art').classList.add('loaded'); };
-        img.src = art;
-      }
-    }
+    if (art !== lastArt) showArtwork(art);
 
     $('progress').classList.toggle('off', !ext || !(media.duration > 0));
     $('seek').classList.toggle('disabled', !(ext && media.canSeek && media.duration > 0));
@@ -217,15 +323,17 @@
   }
   setInterval(tickProgress, 250);
 
-  $('play').addEventListener('click', () => {
+  $('play').addEventListener('click', async () => {
     if (media.source === 'ext') {
       media.playing = !media.playing; media.position = livePosition(); mediaAt = Date.now();
       renderPlayButton(media.playing); optimisticUntil = Date.now() + 1500;
     }
-    act('media', 'toggle');
+    const r = await act('media', 'toggle');
+    if (!r.ok) feedback($('play'), r);
   });
-  $('next').addEventListener('click', () => act('media', 'next'));
-  $('prev').addEventListener('click', () => act('media', 'prev'));
+  $('next').addEventListener('click', async () => feedback($('next'), await act('media', 'next')));
+  $('prev').addEventListener('click', async () => feedback($('prev'), await act('media', 'prev')));
+  ['play', 'next', 'prev', 'mute'].forEach((id) => $(id).addEventListener('pointerdown', (e) => ripple($(id), e)));
 
   // ------------------------------------------------------------------ volume
   let muted = false;
@@ -251,6 +359,7 @@
       const keep = savedPage();
       [...pagesEl.querySelectorAll('.page.deck-page')].forEach((p) => p.remove());
       pageNames.length = 1;
+      shownPage = -1;
       stateKeys = [];
       deck.pages.forEach((page) => {
         const section = document.createElement('section');
@@ -259,7 +368,7 @@
         grid.className = 'deck';
         grid.style.setProperty('--cols', page.cols);
         grid.style.setProperty('--rows', page.rows);
-        page.buttons.forEach((b) => grid.appendChild(renderKey(b)));
+        page.buttons.forEach((b, i) => grid.appendChild(renderKey(b, i)));
         section.appendChild(grid);
         pagesEl.appendChild(section);
         pageNames.push(page.name);
@@ -270,9 +379,11 @@
     } catch { setTimeout(loadDeck, 3000); }
   }
 
-  function renderKey(b) {
+  function renderKey(b, index) {
     const el = document.createElement('button');
     el.className = 'key press';
+    el.style.setProperty('--i', index);
+    el.addEventListener('pointerdown', (e) => ripple(el, e));
     el.style.gridColumn = `${b.x + 1} / span ${b.w}`;
     el.style.gridRow = `${b.y + 1} / span ${b.h}`;
     if (b.color) { el.classList.add('colored'); el.style.setProperty('--c', b.color); }
@@ -308,16 +419,15 @@
         return;
       }
       if (armed) disarm();
-      el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
       let message;
-      if (b.system === 'mute') { toggleMute(); return; }
+      if (b.system === 'mute') { feedback(el, await toggleMute()); return; }
       if (sys && sys.state) {
         stats[sys.state] = !stats[sys.state]; renderStates();
         if (b.system === 'caffeinate') message = t(stats.caffeinate ? 'awakeOn' : 'awakeOff');
       }
       if (b.system === 'screenshot') message = t('saved');
       if (b.system === 'lock') message = t('locked');
-      await act('deck', b.id, message);
+      feedback(el, await act('deck', b.id, message));
       if (sys && sys.state) setTimeout(pollStats, 600);
     });
     return el;

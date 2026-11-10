@@ -17,7 +17,7 @@ button { background: none; border: 0; padding: 0; }
 
 /* ---------- frame ---------- */
 .shell {
-  position: fixed; inset: 0; display: flex; flex-direction: column;
+  position: fixed; inset: 0; z-index: 1; display: flex; flex-direction: column;
   padding: var(--pad-t) 0 var(--pad-b);
 }
 .bar {
@@ -45,29 +45,43 @@ button { background: none; border: 0; padding: 0; }
 
 .dots { flex: none; height: 22px; display: flex; justify-content: center; align-items: center; gap: 4px; }
 .dots button { width: 28px; height: 22px; display: grid; place-items: center; }
-.dots button::after { content: ""; width: 7px; height: 7px; border-radius: 4px; background: var(--faint); transition: width .2s, background .2s; }
-.dots button.active::after { width: 20px; background: var(--text); }
+.dots button span { width: 7px; height: 7px; border-radius: 4px; background: var(--faint); transition: background .25s; }
+.dots button.active span { background: var(--text); }
 
 .card { background: var(--card); border-radius: var(--radius); }
-.press { transition: transform .12s, background .12s, filter .12s; }
-.press:active { transform: scale(.95); background: var(--card-press); }
+/* Press in quickly, spring back out. */
+.press { transition: transform .5s cubic-bezier(.34, 1.56, .64, 1), background .25s, filter .15s; }
+.press:active { transform: scale(.94); background: var(--card-press); transition-duration: .1s; }
 
 /* ---------- music page ---------- */
+/* The current artwork, blurred, softly lighting the whole screen behind the
+   music page. It fades out as you swipe to the button pages (--show). */
+.ambient { position: fixed; inset: -20%; z-index: 0; pointer-events: none;
+  filter: blur(90px) saturate(1.25); opacity: calc(.22 * var(--show, 1)); }
 .music { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+/* Artwork layers cross-fade when the track changes. */
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transform: scale(1.06); transition: opacity .7s ease, transform .9s cubic-bezier(.2, .8, .2, 1); }
+.layer.in { opacity: 1; transform: none; }
 .np { flex: 1; min-height: 0; display: flex; gap: 22px; }
 .art {
   height: 100%; aspect-ratio: 1 / 1; flex: none; border-radius: 20px; overflow: hidden;
   background: var(--card); display: grid; place-items: center; color: var(--faint);
   box-shadow: 0 10px 30px rgba(0,0,0,.4);
 }
-.art img { width: 100%; height: 100%; object-fit: cover; display: none; }
-.art.loaded img { display: block; }
-.art.loaded svg { display: none; }
+.art { position: relative; }
+.art svg { transition: opacity .4s; }
+.art.loaded svg { opacity: 0; }
 .art svg { width: 64px; height: 64px; }
 .np-side { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 0; }
 .source { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
-.source .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
-.source.live .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+.eq i { width: 3px; height: 4px; border-radius: 1.5px; background: var(--faint); transition: background .3s; }
+.source.live .eq i { background: var(--ok); animation: eq .9s ease-in-out infinite alternate; }
+.source.live .eq i:nth-child(2) { animation-duration: .7s; animation-delay: -.3s; }
+.source.live .eq i:nth-child(3) { animation-duration: 1.1s; animation-delay: -.6s; }
+@keyframes eq { from { height: 3px; } to { height: 12px; } }
+/* New track: title and artist slide in. */
+.swap { animation: fade-up .5s cubic-bezier(.2, .8, .2, 1); }
 .title { font-size: 26px; font-weight: 800; line-height: 1.15; letter-spacing: -.015em; margin-top: 6px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .artist { font-size: 17px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -79,19 +93,21 @@ button { background: none; border: 0; padding: 0; }
 .progress span:last-child { text-align: right; }
 .seek { flex: 1; height: 32px; position: relative; touch-action: none; }
 .seek .track { position: absolute; left: 0; right: 0; top: 12px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); overflow: hidden; transition: top .1s, height .1s; }
-.seek .fill { height: 100%; width: 0; background: var(--text); }
+.seek .fill { height: 100%; width: 0; background: var(--text); transition: width .25s linear; }
+.seek.active .fill { transition: none; }
 .seek.active .track { top: 9px; height: 14px; border-radius: 7px; }
 .seek.disabled { pointer-events: none; }
 
 .transport { display: flex; align-items: center; gap: 16px; }
-.transport button { height: 76px; flex: 1; border-radius: 22px; background: var(--card); display: grid; place-items: center; }
+.transport button { position: relative; overflow: hidden; height: 76px; flex: 1; border-radius: 22px; background: var(--card); display: grid; place-items: center; }
 .transport .ico { width: 36px; height: 36px; }
 .transport .play { flex: 1.4; background: var(--text); color: var(--bg); }
 .transport .play:active { background: #d4d4dc; }
 .transport .play .ico { width: 40px; height: 40px; }
+.transport .play.morph .ico { animation: pop .45s cubic-bezier(.34, 1.56, .64, 1); }
 
 .hslider { flex: none; height: 64px; display: flex; gap: 12px; }
-.hslider .btn { width: 64px; flex: none; display: grid; place-items: center; color: var(--muted); }
+.hslider .btn { position: relative; overflow: hidden; width: 64px; flex: none; display: grid; place-items: center; color: var(--muted); }
 .hslider .btn.on { color: var(--danger); background: rgba(248,113,113,.14); }
 .pill { flex: 1; border-radius: 20px; background: var(--card); overflow: hidden; position: relative; touch-action: none; }
 .pill .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
@@ -108,8 +124,20 @@ button { background: none; border: 0; padding: 0; }
 .key.on.mute .ico { color: var(--danger); }
 .key.armed { background: rgba(248,113,113,.35) !important; }
 .key.armed .ico { color: var(--danger); }
-.key.flash { animation: flash .5s; }
-@keyframes flash { 0% { box-shadow: inset 0 0 0 3px rgba(255,255,255,.7); } 100% { box-shadow: inset 0 0 0 3px transparent; } }
+/* A ripple from where you touched, then green if it worked, a shake if not. */
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; transform: scale(0);
+  background: radial-gradient(circle, rgba(255,255,255,.35), rgba(255,255,255,0) 62%); animation: ripple .65s ease-out forwards; }
+@keyframes ripple { to { transform: scale(1); opacity: 0; } }
+.ok { animation: ok .8s ease-out; }
+@keyframes ok { from { box-shadow: inset 0 0 0 3px rgba(74,222,128,.95), inset 0 0 28px rgba(74,222,128,.35); } to { box-shadow: inset 0 0 0 3px rgba(74,222,128,0), inset 0 0 28px rgba(74,222,128,0); } }
+.fail { animation: fail .5s ease-out; }
+@keyframes fail {
+  0%, 100% { transform: none; box-shadow: inset 0 0 0 3px rgba(248,113,113,0); }
+  20% { transform: translateX(-7px); box-shadow: inset 0 0 0 3px rgba(248,113,113,.9); }
+  40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(2px); }
+}
+/* Landing on a button page: its buttons pop in one after another. */
+.page.enter .key { animation: key-in .55s cubic-bezier(.2, .9, .3, 1.15) both; animation-delay: calc(var(--i, 0) * 35ms); }
 
 /* ---------- overlays ---------- */
 .toast {
@@ -130,10 +158,22 @@ button { background: none; border: 0; padding: 0; }
 .gate p { color: var(--muted); margin: 0; line-height: 1.5; }
 
 /* ---------- portrait ---------- */
+/* ---------- always landscape ---------- */
+/* iOS web apps can't lock orientation, so when the phone reports portrait the
+   whole screen is turned 90° and stays in the landscape layout. The device's
+   top (notch) becomes the left edge, its bottom (home bar) the right edge. */
+.screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh; }
 @media (orientation: portrait) {
-  .bar .date { display: none; }
-  .np { flex-direction: column; gap: 14px; }
-  .art { height: auto; width: 100%; max-height: 46vh; }
+  :root {
+    --pad-l: max(16px, env(safe-area-inset-top));
+    --pad-r: max(16px, env(safe-area-inset-bottom));
+    --pad-t: max(10px, env(safe-area-inset-right));
+    --pad-b: max(6px, env(safe-area-inset-left));
+  }
+  .screen {
+    width: 100vh; width: 100dvh; height: 100vw;
+    transform-origin: top left; transform: rotate(90deg) translateY(-100%);
+  }
 }
 @media (max-height: 360px) and (orientation: landscape) {
   .transport button { height: 64px; }
